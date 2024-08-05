@@ -1,9 +1,8 @@
 import sys
 import pymysql
 import configparser
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QLineEdit, QTextEdit, QComboBox, QGridLayout, QFrame, QTableWidget, QTableWidgetItem, QPushButton, QHeaderView, QInputDialog, QSizePolicy, QDateEdit, QDialog, QLabel, QDialogButtonBox)
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QLineEdit, QTableWidget, QTableWidgetItem, QComboBox, QGridLayout, QFrame, QPushButton, QHeaderView, QInputDialog, QSizePolicy, QDateEdit, QDialog, QLabel, QDialogButtonBox)
 from PyQt5.QtCore import pyqtSlot, Qt, QDate
-from PyQt5.QtGui import QIcon, QPixmap
 from datetime import datetime, timedelta
 
 class CustomTableWidget(QTableWidget):
@@ -16,12 +15,14 @@ class CustomTableWidget(QTableWidget):
         self.horizontalHeader().customContextMenuRequested.connect(self.handle_header_context_menu)
 
     def handle_header_context_menu(self, pos):
+        # Handle right-click on header to filter column
         logical_index = self.horizontalHeader().logicalIndexAt(pos)
         self.filter_column(logical_index)
 
     def filter_column(self, column):
+        # Filter column based on text or date
         column_name = self.horizontalHeaderItem(column).text()
-        if column_name in ["CreationDate", "LastUpdate"]:
+        if column_name in ["CreationDate", "LastUpdate", "StartDate"]:
             self.filter_by_date(column, column_name)
         else:
             filter_value, ok = QInputDialog.getText(self, "Filter", f"Enter filter value for {column_name}:")
@@ -37,6 +38,7 @@ class CustomTableWidget(QTableWidget):
                         self.setRowHidden(row, False)
 
     def filter_by_date(self, column, column_name):
+        # Filter column based on date selection
         dialog = QDialog(self)
         dialog.setWindowTitle("Select Date")
         dialog_layout = QVBoxLayout()
@@ -67,6 +69,7 @@ class CustomTableWidget(QTableWidget):
                     self.setRowHidden(row, False)
 
     def sort_column(self, column):
+        # Sort column based on ascending or descending order
         sort_order = self.horizontalHeader().sortIndicatorOrder()
         self.sortItems(column, sort_order)
         if sort_order == Qt.AscendingOrder:
@@ -138,7 +141,6 @@ class MainWindow(QMainWindow):
         # Main result table
         self.result_table = CustomTableWidget()
         self.result_table.setColumnCount(5)
-        # Updated header labels with generic names
         self.result_table.setHorizontalHeaderLabels(["CustomerID", "IsActive", "PackageID", "Description", "Source"])
         self.result_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.result_table.setSelectionMode(QTableWidget.SingleSelection)
@@ -147,18 +149,28 @@ class MainWindow(QMainWindow):
         left_layout.addWidget(self.result_table)
 
         # Subresult search and box
-        search_info_textbox2 = QLineEdit(self)
-        search_info_textbox2.setPlaceholderText("Search inside SubResult...")
-        search_info_textbox2.setMaximumWidth(525)
-        search_info_textbox2.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        left_layout.addWidget(search_info_textbox2)
+        sub_search_layout = QHBoxLayout()
+        sub_search_container = QWidget()
+        sub_search_container.setMaximumWidth(525)
+        sub_search_container.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        sub_search_container.setLayout(sub_search_layout)
 
-        self.info_textbox2 = QTextEdit(self)
-        self.info_textbox2.setPlainText("SubResult")
-        self.info_textbox2.setReadOnly(True)
-        self.info_textbox2.setMaximumWidth(525)
-        self.info_textbox2.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        left_layout.addWidget(self.info_textbox2)
+        self.sub_search_combo_box = QComboBox(self)
+        self.sub_search_combo_box.addItem("Inplay Schedule")
+        # Add more items as needed here...
+        sub_search_layout.addWidget(self.sub_search_combo_box)
+
+        self.sub_search_button = QPushButton("Search", self)
+        self.sub_search_button.setMaximumWidth(100)
+        self.sub_search_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.sub_search_button.clicked.connect(self.sub_search_button_clicked)
+        sub_search_layout.addWidget(self.sub_search_button)
+
+        left_layout.addWidget(sub_search_container)
+
+        self.sub_result_table = CustomTableWidget()
+        self.sub_result_table.setMaximumWidth(525)
+        left_layout.addWidget(self.sub_result_table)
 
         content_layout.addLayout(left_layout)
 
@@ -166,9 +178,9 @@ class MainWindow(QMainWindow):
         right_layout = QGridLayout()
 
         # InfoBox3
-        right_layout.addWidget(self.create_info_box("Infobox1", "Option1", "Option2", self.search_button_clicked_info3), 0, 0)
+        right_layout.addWidget(self.create_info_box("Infobox1", "TRIP", "TRPM", self.search_button_clicked_info3), 0, 0)
         # InfoBox4
-        right_layout.addWidget(self.create_info_box("Infobox2", "Option1", "Option2", self.search_button_clicked_info4), 0, 1)
+        right_layout.addWidget(self.create_info_box("Infobox2", "TRIP", "TRPM", self.search_button_clicked_info4), 0, 1)
 
         content_layout.addLayout(right_layout)
         main_layout.addLayout(content_layout)
@@ -177,7 +189,7 @@ class MainWindow(QMainWindow):
         self.load_database_config()
 
     def load_database_config(self):
-        # Load database connection configuration from config.ini file
+        # Load database connection details from config.ini
         config = configparser.ConfigParser()
         config.read('config.ini')
 
@@ -189,7 +201,7 @@ class MainWindow(QMainWindow):
         }
 
     def create_info_box(self, placeholder, option1, option2, search_button_slot):
-        # Create an information box with a combo box and a text field
+        # Create an information box with combobox and search button
         frame = QFrame()
         layout = QVBoxLayout()
         frame.setLayout(layout)
@@ -220,7 +232,7 @@ class MainWindow(QMainWindow):
 
     @pyqtSlot()
     def search_textbox_keydown(self):
-        # Handle search action when Enter key is pressed in the search textbox
+        # Trigger search when the Enter key is pressed in the search textbox
         search_text = self.search_textbox.text()
         if search_text.isdigit():
             self.search_database_for_numeric_info(search_text)
@@ -238,7 +250,7 @@ class MainWindow(QMainWindow):
         self.search_button_clicked("Infobox2")
 
     def search_button_clicked(self, infobox):
-        # Handle search button click and get selected row's package ID
+        # Handle search button click and query the database accordingly
         selected_items = self.result_table.selectedItems()
         if not selected_items:
             return
@@ -259,28 +271,82 @@ class MainWindow(QMainWindow):
         if not selected_items:
             return
 
+    @pyqtSlot()
+    def sub_search_button_clicked(self):
+        # Handle sub-search button click based on selected table
+        selected_table = self.sub_search_combo_box.currentText()
+
+        if selected_table == "Inplay Schedule":
+            self.query_inplay_schedule()
+        # Add more elif clauses for other subsearch options
+
+    def query_inplay_schedule(self):
+        # Query the database for inplay schedule and update the subresult table
+        try:
+            connection = pymysql.connect(**self.connection_config)
+            cursor = connection.cursor()
+
+            query = """
+                SELECT s.FixtureId, GROUP_CONCAT(DISTINCT s.ProviderId) AS ProviderIds, f.StartDate
+                FROM data.inplayfixtureschedule s
+                JOIN data.fixtures f ON s.FixtureId = f.Id
+                WHERE f.StartDate > NOW()
+                GROUP BY s.FixtureId, f.StartDate;
+            """
+            cursor.execute(query)
+            results = cursor.fetchall()
+
+            connection.commit()
+
+        except pymysql.MySQLError as e:
+            results = []
+        except Exception as e:
+            results = []
+        finally:
+            cursor.close()
+            connection.close()
+
+        self.display_subsearch_results(results)
+
+    def display_subsearch_results(self, results):
+        # Display sub-search results in the subresult table
+        self.sub_result_table.setRowCount(0)
+        if not results:
+            self.sub_result_table.setRowCount(1)
+            self.sub_result_table.setItem(0, 0, QTableWidgetItem("No results found."))
+            return
+
+        columns = ["FixtureID", "ProviderIds", "StartDate"]
+        self.sub_result_table.setColumnCount(len(columns))
+        self.sub_result_table.setHorizontalHeaderLabels(columns)
+
+        for row in results:
+            row_position = self.sub_result_table.rowCount()
+            self.sub_result_table.insertRow(row_position)
+            for col_idx, col_val in enumerate(row):
+                self.sub_result_table.setItem(row_position, col_idx, QTableWidgetItem(str(col_val)))
+
     def search_database_for_numeric_info(self, search_value):
-        # Query the database for numeric search values (e.g., IDs)
+        # Query the database for numeric search values and update the result table
         connection = pymysql.connect(**self.connection_config)
         cursor = connection.cursor()
 
-        # Update queries with generic table and column names
         query1 = """
-            SELECT CustomerID, IsActive, PackageID, Description
-            FROM DefaultTable1
-            WHERE Id = %s OR CustomerID = %s;
+            SELECT CustomerId, IsActive, Id as PackageID, Description
+            FROM stm.customerpackages
+            WHERE Id = %s OR CustomerId = %s;
         """
 
         query2 = """
-            SELECT CustomerID, IsActive, PackageID, Description
-            FROM DefaultTable2
-            WHERE Id = %s OR CustomerID = %s;
+            SELECT CustomerId, IsActive, Id as PackageID, Description
+            FROM data.customerpackages
+            WHERE Id = %s OR CustomerId = %s;
         """
 
         query3 = """
-            SELECT CustomerID, IsActive, PackageID, Description
-            FROM DefaultTable3
-            WHERE Id = %s OR CustomerID = %s;
+            SELECT CustomerId, IsActive, Id as PackageID, Description
+            FROM data.customerpackages_new
+            WHERE Id = %s OR CustomerId = %s;
         """
 
         try:
@@ -299,9 +365,9 @@ class MainWindow(QMainWindow):
                 self.result_table.setRowCount(1)
                 self.result_table.setItem(0, 0, QTableWidgetItem("No results found."))
             else:
-                self.add_results_to_table(results1, "Source1")
-                self.add_results_to_table(results2, "Source2")
-                self.add_results_to_table(results3, "Source3")
+                self.add_results_to_table(results1, "Trade360")
+                self.add_results_to_table(results2, "OddService")
+                self.add_results_to_table(results3, "OddService")
 
             connection.commit()
         except Exception as e:
@@ -312,26 +378,25 @@ class MainWindow(QMainWindow):
             connection.close()
 
     def search_database_for_text_info(self, search_text):
-        # Query the database for text search values (e.g., Descriptions)
+        # Query the database for text search values and update the result table
         connection = pymysql.connect(**self.connection_config)
         cursor = connection.cursor()
 
-        # Update queries with generic table and column names
         query1 = """
-            SELECT CustomerID, IsActive, PackageID, Description
-            FROM DefaultTable1
+            SELECT CustomerId, IsActive, Id as PackageID, Description
+            FROM stm.customerpackages
             WHERE Description LIKE %s;
         """
 
         query2 = """
-            SELECT CustomerID, IsActive, PackageID, Description
-            FROM DefaultTable2
+            SELECT CustomerId, IsActive, Id as PackageID, Description
+            FROM data.customerpackages
             WHERE Description LIKE %s;
         """
 
         query3 = """
-            SELECT CustomerID, IsActive, PackageID, Description
-            FROM DefaultTable3
+            SELECT CustomerId, IsActive, Id as PackageID, Description
+            FROM data.customerpackages_new
             WHERE Description LIKE %s;
         """
 
@@ -351,9 +416,9 @@ class MainWindow(QMainWindow):
                 self.result_table.setRowCount(1)
                 self.result_table.setItem(0, 0, QTableWidgetItem("No results found."))
             else:
-                self.add_results_to_table(results1, "Source1")
-                self.add_results_to_table(results2, "Source2")
-                self.add_results_to_table(results3, "Source3")
+                self.add_results_to_table(results1, "Trade360")
+                self.add_results_to_table(results2, "OddService")
+                self.add_results_to_table(results3, "OddService")
 
             connection.commit()
         except Exception as e:
@@ -364,7 +429,7 @@ class MainWindow(QMainWindow):
             connection.close()
 
     def add_results_to_table(self, results, source):
-        # Add results from the query to the result table
+        # Add query results to the result table
         for row in results:
             row_position = self.result_table.rowCount()
             self.result_table.insertRow(row_position)
@@ -376,7 +441,7 @@ class MainWindow(QMainWindow):
             self.result_table.setItem(row_position, 4, QTableWidgetItem(source))
 
     def filter_results(self):
-        # Filter results in the result table based on search text in the individual search boxes
+        # Filter results displayed in the result table based on the text in the search boxes
         customer_id_filter = self.customer_id_search.text()
         is_active_filter = self.is_active_search.text().lower()
         package_id_filter = self.package_id_search.text()
@@ -397,34 +462,34 @@ class MainWindow(QMainWindow):
             self.result_table.setRowHidden(row, not is_row_visible)
 
     def handle_selection_async(self, selection, infobox, package_id):
-        # Handle selection change in combo boxes to query appropriate data
-        if selection == "Option1":
-            self.query_subscription_and_event_async("DefaultSubscriptionTable1", infobox, package_id)
-        elif selection == "Option2":
-            self.query_subscription_and_event_async("DefaultSubscriptionTable2", infobox, package_id)
+        # Handle changes in the combobox selection and query the database accordingly
+        if selection == "TRIP":
+            self.query_subscription_and_fixture_async("stm.inplaysubscriptions", infobox, package_id)
+        elif selection == "TRPM":
+            self.query_subscription_and_fixture_async("stm.prematchfixturesubscription", infobox, package_id)
 
-    def query_subscription_and_event_async(self, subscription_table, infobox, package_id):
-        # Query the subscription table for event IDs based on the search term
+    def query_subscription_and_fixture_async(self, subscription_table, infobox, package_id):
+        # Query the subscription and fixture tables for fixture details
         try:
             connection = pymysql.connect(**self.connection_config)
             cursor = connection.cursor()
 
-            if subscription_table == "DefaultSubscriptionTable1":
+            if subscription_table == "stm.inplaysubscriptions":
                 query = f"""
-                    SELECT x.EventID, x.IsAutoAdded, x.IsDeleted, x.SubscriptionStatus, x.CreationDate, x.LastUpdate
+                    SELECT x.FixtureId as FixtureID, x.IsAutoAdded, x.IsDeleted, x.SubscriptionStatus, x.CreationDate, x.LastUpdate
                     FROM {subscription_table} x
-                    JOIN DefaultEventTable f ON x.EventID = f.Id
-                    WHERE x.PackageID = %s AND f.StartDate > NOW() - INTERVAL 14 DAY;
+                    JOIN data.fixtures f ON x.FixtureId = f.Id
+                    WHERE x.PackageId = %s AND f.StartDate > NOW() - INTERVAL 14 DAY;
                 """
-                columns = ["EventID", "IsAutoAdded", "IsDeleted", "SubscriptionStatus", "CreationDate", "LastUpdate"]
+                columns = ["FixtureID", "IsAutoAdded", "IsDeleted", "SubscriptionStatus", "CreationDate", "LastUpdate"]
             else:
                 query = f"""
-                    SELECT x.EventID, x.CreationDate
+                    SELECT x.FixtureId as FixtureID, x.CreationDate
                     FROM {subscription_table} x
-                    JOIN DefaultEventTable f ON x.EventID = f.Id
-                    WHERE x.PackageID = %s AND f.StartDate > NOW() - INTERVAL 14 DAY;
+                    JOIN data.fixtures f ON x.FixtureId = f.Id
+                    WHERE x.PackageId = %s AND f.StartDate > NOW() - INTERVAL 14 DAY;
                 """
-                columns = ["EventID", "CreationDate"]
+                columns = ["FixtureID", "CreationDate"]
 
             cursor.execute(query, (package_id,))
             filtered_results = cursor.fetchall()
@@ -432,10 +497,8 @@ class MainWindow(QMainWindow):
             connection.commit()
 
         except pymysql.MySQLError as e:
-            print(f"MySQL error: {e}")
             filtered_results = []
         except Exception as e:
-            print(f"Error: {e}")
             filtered_results = []
         finally:
             cursor.close()
@@ -444,7 +507,7 @@ class MainWindow(QMainWindow):
         self.display_results_in_infobox(filtered_results, infobox, columns)
 
     def display_results_in_infobox(self, results, infobox, columns):
-        # Display the results in the appropriate info box
+        # Display query results in the specified info box
         info_table = self.info_table1 if infobox == "Infobox1" else self.info_table2
         info_table.setRowCount(0)
         info_table.setColumnCount(len(columns))
@@ -455,7 +518,6 @@ class MainWindow(QMainWindow):
             info_table.insertRow(row_position)
             for col_idx, col_val in enumerate(row):
                 if columns[col_idx] in ["IsAutoAdded", "IsDeleted"]:
-                    # Convert binary values to "Yes" or "No"
                     col_val = "Yes" if col_val == b'\x01' else "No"
                 info_table.setItem(row_position, col_idx, QTableWidgetItem(str(col_val)))
 

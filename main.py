@@ -65,11 +65,19 @@ class CustomTableWidget(QTableWidget):
                 else:
                     self.setRowHidden(row, False)
 
+    def sort_column(self, column):
+        sort_order = self.horizontalHeader().sortIndicatorOrder()
+        self.sortItems(column, sort_order)
+        if sort_order == Qt.AscendingOrder:
+            self.horizontalHeader().setSortIndicator(column, Qt.DescendingOrder)
+        else:
+            self.horizontalHeader().setSortIndicator(column, Qt.AscendingOrder)
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        self.setWindowTitle("Ez DB Search")
+        self.setWindowTitle("Easy DB viewer")
         self.setGeometry(100, 100, 1024, 720)
 
         main_widget = QWidget()
@@ -144,7 +152,7 @@ class MainWindow(QMainWindow):
         sub_search_container.setLayout(sub_search_layout)
 
         self.sub_search_combo_box = QComboBox(self)
-        self.sub_search_combo_box.addItem("Schedule")
+        self.sub_search_combo_box.addItem("Inplay Schedule")
         # Add more items as needed here...
         sub_search_layout.addWidget(self.sub_search_combo_box)
 
@@ -172,9 +180,9 @@ class MainWindow(QMainWindow):
         right_layout = QGridLayout()
 
         # InfoBox3
-        right_layout.addWidget(self.create_info_box("Infobox1", "Option1", "Option2", self.search_button_clicked_info3), 0, 0)
+        right_layout.addWidget(self.create_info_box("Infobox1", "TRIP", "TRPM", self.search_button_clicked_info3), 0, 0)
         # InfoBox4
-        right_layout.addWidget(self.create_info_box("Infobox2", "Option1", "Option2", self.search_button_clicked_info4), 0, 1)
+        right_layout.addWidget(self.create_info_box("Infobox2", "TRIP", "TRPM", self.search_button_clicked_info4), 0, 1)
 
         content_layout.addLayout(right_layout)
         main_layout.addLayout(content_layout)
@@ -268,21 +276,21 @@ class MainWindow(QMainWindow):
     def sub_search_button_clicked(self):
         selected_table = self.sub_search_combo_box.currentText()
 
-        if selected_table == "Schedule":
-            self.query_schedule()
+        if selected_table == "Inplay Schedule":
+            self.query_inplay_schedule()
         # Add more elif clauses for other subsearch options
 
-    def query_schedule(self):
+    def query_inplay_schedule(self):
         try:
             connection = pymysql.connect(**self.connection_config)
             cursor = connection.cursor()
 
             query = """
-                SELECT s.EventID, GROUP_CONCAT(DISTINCT s.ProviderId) AS ProviderIds, f.StartDate
-                FROM DefaultSubTable1 s
-                JOIN DefaultMainTable f ON s.EventID = f.Id
+                SELECT s.FixtureId, GROUP_CONCAT(DISTINCT s.ProviderId) AS ProviderIds, f.StartDate
+                FROM data.inplayfixtureschedule s
+                JOIN data.fixtures f ON s.FixtureId = f.Id
                 WHERE f.StartDate > NOW()
-                GROUP BY s.EventID, f.StartDate;
+                GROUP BY s.FixtureId, f.StartDate;
             """
             cursor.execute(query)
             results = cursor.fetchall()
@@ -306,7 +314,7 @@ class MainWindow(QMainWindow):
             self.sub_result_table.setItem(0, 0, QTableWidgetItem("No results found."))
             return
 
-        columns = ["EventID", "ProviderIds", "StartDate"]
+        columns = ["FixtureID", "ProviderIds", "StartDate"]
         self.sub_result_table.setColumnCount(len(columns))
         self.sub_result_table.setHorizontalHeaderLabels(columns)
 
@@ -321,21 +329,21 @@ class MainWindow(QMainWindow):
         cursor = connection.cursor()
 
         query1 = """
-            SELECT CustomerID, IsActive, PackageID, Description
-            FROM DefaultTable1
-            WHERE Id = %s OR CustomerID = %s;
+            SELECT CustomerId, IsActive, Id as PackageID, Description
+            FROM stm.customerpackages
+            WHERE Id = %s OR CustomerId = %s;
         """
 
         query2 = """
-            SELECT CustomerID, IsActive, PackageID, Description
-            FROM DefaultTable2
-            WHERE Id = %s OR CustomerID = %s;
+            SELECT CustomerId, IsActive, Id as PackageID, Description
+            FROM data.customerpackages
+            WHERE Id = %s OR CustomerId = %s;
         """
 
         query3 = """
-            SELECT CustomerID, IsActive, PackageID, Description
-            FROM DefaultTable3
-            WHERE Id = %s OR CustomerID = %s;
+            SELECT CustomerId, IsActive, Id as PackageID, Description
+            FROM data.customerpackages_new
+            WHERE Id = %s OR CustomerId = %s;
         """
 
         try:
@@ -354,9 +362,9 @@ class MainWindow(QMainWindow):
                 self.result_table.setRowCount(1)
                 self.result_table.setItem(0, 0, QTableWidgetItem("No results found."))
             else:
-                self.add_results_to_table(results1, "Source1")
-                self.add_results_to_table(results2, "Source2")
-                self.add_results_to_table(results3, "Source3")
+                self.add_results_to_table(results1, "Trade360")
+                self.add_results_to_table(results2, "OddService")
+                self.add_results_to_table(results3, "OddService")
 
             connection.commit()
         except Exception as e:
@@ -371,20 +379,20 @@ class MainWindow(QMainWindow):
         cursor = connection.cursor()
 
         query1 = """
-            SELECT CustomerID, IsActive, PackageID, Description
-            FROM DefaultTable1
+            SELECT CustomerId, IsActive, Id as PackageID, Description
+            FROM stm.customerpackages
             WHERE Description LIKE %s;
         """
 
         query2 = """
-            SELECT CustomerID, IsActive, PackageID, Description
-            FROM DefaultTable2
+            SELECT CustomerId, IsActive, Id as PackageID, Description
+            FROM data.customerpackages
             WHERE Description LIKE %s;
         """
 
         query3 = """
-            SELECT CustomerID, IsActive, PackageID, Description
-            FROM DefaultTable3
+            SELECT CustomerId, IsActive, Id as PackageID, Description
+            FROM data.customerpackages_new
             WHERE Description LIKE %s;
         """
 
@@ -404,9 +412,9 @@ class MainWindow(QMainWindow):
                 self.result_table.setRowCount(1)
                 self.result_table.setItem(0, 0, QTableWidgetItem("No results found."))
             else:
-                self.add_results_to_table(results1, "Source1")
-                self.add_results_to_table(results2, "Source2")
-                self.add_results_to_table(results3, "Source3")
+                self.add_results_to_table(results1, "Trade360")
+                self.add_results_to_table(results2, "OddService")
+                self.add_results_to_table(results3, "OddService")
 
             connection.commit()
         except Exception as e:
@@ -448,32 +456,32 @@ class MainWindow(QMainWindow):
             self.result_table.setRowHidden(row, not is_row_visible)
 
     def handle_selection_async(self, selection, infobox, package_id):
-        if selection == "Option1":
-            self.query_subscription_and_event_async("DefaultSubscriptionTable1", infobox, package_id)
-        elif selection == "Option2":
-            self.query_subscription_and_event_async("DefaultSubscriptionTable2", infobox, package_id)
+        if selection == "TRIP":
+            self.query_subscription_and_fixture_async("stm.inplaysubscriptions", infobox, package_id)
+        elif selection == "TRPM":
+            self.query_subscription_and_fixture_async("stm.prematchfixturesubscription", infobox, package_id)
 
-    def query_subscription_and_event_async(self, subscription_table, infobox, package_id):
+    def query_subscription_and_fixture_async(self, subscription_table, infobox, package_id):
         try:
             connection = pymysql.connect(**self.connection_config)
             cursor = connection.cursor()
 
-            if subscription_table == "DefaultSubscriptionTable1":
+            if subscription_table == "stm.inplaysubscriptions":
                 query = f"""
-                    SELECT x.EventID, x.IsAutoAdded, x.IsDeleted, x.SubscriptionStatus, x.CreationDate, x.LastUpdate
+                    SELECT x.FixtureId as FixtureID, x.IsAutoAdded, x.IsDeleted, x.SubscriptionStatus, x.CreationDate, x.LastUpdate
                     FROM {subscription_table} x
-                    JOIN DefaultEventTable f ON x.EventID = f.Id
-                    WHERE x.PackageID = %s AND f.StartDate > NOW() - INTERVAL 14 DAY;
+                    JOIN data.fixtures f ON x.FixtureId = f.Id
+                    WHERE x.PackageId = %s AND f.StartDate > NOW() - INTERVAL 14 DAY;
                 """
-                columns = ["EventID", "IsAutoAdded", "IsDeleted", "SubscriptionStatus", "CreationDate", "LastUpdate"]
+                columns = ["FixtureID", "IsAutoAdded", "IsDeleted", "SubscriptionStatus", "CreationDate", "LastUpdate"]
             else:
                 query = f"""
-                    SELECT x.EventID, x.CreationDate
+                    SELECT x.FixtureId as FixtureID, x.CreationDate
                     FROM {subscription_table} x
-                    JOIN DefaultEventTable f ON x.EventID = f.Id
-                    WHERE x.PackageID = %s AND f.StartDate > NOW() - INTERVAL 14 DAY;
+                    JOIN data.fixtures f ON x.FixtureId = f.Id
+                    WHERE x.PackageId = %s AND f.StartDate > NOW() - INTERVAL 14 DAY;
                 """
-                columns = ["EventID", "CreationDate"]
+                columns = ["FixtureID", "CreationDate"]
 
             cursor.execute(query, (package_id,))
             filtered_results = cursor.fetchall()
@@ -505,19 +513,25 @@ class MainWindow(QMainWindow):
                 info_table.setItem(row_position, col_idx, QTableWidgetItem(str(col_val)))
 
     def export_to_csv(self, table_widget, result_type):
-        export_dir = os.path.join(os.path.expanduser("~"), "Documents", "Ez Search")
+        # Create directory if it doesn't exist
+        export_dir = os.path.join(os.path.expanduser("~"), "Documents", "Easy DB viewer")
         os.makedirs(export_dir, exist_ok=True)
 
+        # Define filename with current date and time
         current_datetime = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"{result_type}_{current_datetime}.csv"
         filepath = os.path.join(export_dir, filename)
 
+        # Write table data to CSV file
         with open(filepath, mode='w', newline='') as file:
             writer = csv.writer(file)
+            # Write header
             writer.writerow([table_widget.horizontalHeaderItem(i).text() for i in range(table_widget.columnCount())])
+            # Write data rows
             for row in range(table_widget.rowCount()):
                 writer.writerow([table_widget.item(row, col).text() for col in range(table_widget.columnCount())])
 
+        # Show notification to user
         QMessageBox.information(self, "Export Successful", f"Data exported to {filepath}")
 
 def main():

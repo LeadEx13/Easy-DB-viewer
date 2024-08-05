@@ -1,8 +1,8 @@
 import sys
 import pymysql
 import configparser
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QLineEdit, QTextEdit, QComboBox, QGridLayout, QFrame, QTableWidget, QTableWidgetItem, QPushButton, QHeaderView, QInputDialog)
-from PyQt5.QtCore import pyqtSlot, Qt
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QLineEdit, QTextEdit, QComboBox, QGridLayout, QFrame, QTableWidget, QTableWidgetItem, QPushButton, QHeaderView, QInputDialog, QSizePolicy, QDateEdit, QDialog, QLabel, QDialogButtonBox)
+from PyQt5.QtCore import pyqtSlot, Qt, QDate
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -20,6 +20,8 @@ class MainWindow(QMainWindow):
         # Top control area
         self.search_textbox = QLineEdit(self)
         self.search_textbox.setPlaceholderText("Search by Id, CustomerId, or Description")
+        self.search_textbox.setMaximumWidth(525)
+        self.search_textbox.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.search_textbox.returnPressed.connect(self.search_textbox_keydown)
         main_layout.addWidget(self.search_textbox)
 
@@ -28,47 +30,64 @@ class MainWindow(QMainWindow):
 
         # Left side - search results and subresults
         left_layout = QVBoxLayout()
+        left_layout.setContentsMargins(0, 0, 10, 0)  # Add margin to the right side
 
         # Search boxes for each column
         search_boxes_layout = QHBoxLayout()
+        search_boxes_container = QWidget()
+        search_boxes_container.setMaximumWidth(525)
+        search_boxes_container.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        search_boxes_container.setLayout(search_boxes_layout)
+
         self.customer_id_search = QLineEdit(self)
         self.customer_id_search.setPlaceholderText("Search CustomerID")
+        self.customer_id_search.setMaximumWidth(525)
         self.customer_id_search.textChanged.connect(self.filter_results)
         search_boxes_layout.addWidget(self.customer_id_search)
 
         self.is_active_search = QLineEdit(self)
         self.is_active_search.setPlaceholderText("Search IsActive")
+        self.is_active_search.setMaximumWidth(525)
         self.is_active_search.textChanged.connect(self.filter_results)
         search_boxes_layout.addWidget(self.is_active_search)
 
         self.package_id_search = QLineEdit(self)
         self.package_id_search.setPlaceholderText("Search PackageID")
+        self.package_id_search.setMaximumWidth(525)
         self.package_id_search.textChanged.connect(self.filter_results)
         search_boxes_layout.addWidget(self.package_id_search)
 
         self.description_search = QLineEdit(self)
         self.description_search.setPlaceholderText("Search Description")
+        self.description_search.setMaximumWidth(525)
         self.description_search.textChanged.connect(self.filter_results)
         search_boxes_layout.addWidget(self.description_search)
 
-        left_layout.addLayout(search_boxes_layout)
+        left_layout.addWidget(search_boxes_container)
 
+        # Main result table
         self.result_table = QTableWidget()
         self.result_table.setColumnCount(5)
         # Updated header labels with generic names
         self.result_table.setHorizontalHeaderLabels(["CustomerID", "IsActive", "PackageID", "Description", "Source"])
         self.result_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.result_table.setSelectionMode(QTableWidget.SingleSelection)
+        self.result_table.setMaximumWidth(525)
         self.result_table.itemSelectionChanged.connect(self.result_table_selection_changed)
         left_layout.addWidget(self.result_table)
 
+        # Subresult search and box
         search_info_textbox2 = QLineEdit(self)
         search_info_textbox2.setPlaceholderText("Search inside SubResult...")
+        search_info_textbox2.setMaximumWidth(525)
+        search_info_textbox2.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         left_layout.addWidget(search_info_textbox2)
 
         self.info_textbox2 = QTextEdit(self)
         self.info_textbox2.setPlainText("SubResult")
         self.info_textbox2.setReadOnly(True)
+        self.info_textbox2.setMaximumWidth(525)
+        self.info_textbox2.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         left_layout.addWidget(self.info_textbox2)
 
         content_layout.addLayout(left_layout)
@@ -361,18 +380,57 @@ class MainWindow(QMainWindow):
             row_position = info_table.rowCount()
             info_table.insertRow(row_position)
             for col_idx, col_val in enumerate(row):
+                if columns[col_idx] in ["IsAutoAdded", "IsDeleted"]:
+                    # Convert binary values to "Yes" or "No"
+                    col_val = "Yes" if col_val == b'\x01' else "No"
                 info_table.setItem(row_position, col_idx, QTableWidgetItem(str(col_val)))
 
     def header_clicked(self, logical_index, table_widget):
         # Handle header click for filtering results
-        filter_value, ok = QInputDialog.getText(self, "Filter", f"Enter filter value for {table_widget.horizontalHeaderItem(logical_index).text()}:")
-        if ok and filter_value:
-            for row in range(table_widget.rowCount()):
-                item = table_widget.item(row, logical_index)
-                if filter_value.lower() not in item.text().lower():
-                    table_widget.setRowHidden(row, True)
-                else:
-                    table_widget.setRowHidden(row, False)
+        column_name = table_widget.horizontalHeaderItem(logical_index).text()
+        if column_name in ["CreationDate", "LastUpdate"]:
+            # Use a custom QDialog to select the date
+            dialog = QDialog(self)
+            dialog.setWindowTitle("Select Date")
+            dialog_layout = QVBoxLayout()
+
+            label = QLabel(f"Select a date for {column_name}:")
+            dialog_layout.addWidget(label)
+
+            date_edit = QDateEdit(dialog)
+            date_edit.setCalendarPopup(True)
+            date_edit.setDate(QDate.currentDate())
+            date_edit.setDisplayFormat("yyyy-MM-dd")
+            dialog_layout.addWidget(date_edit)
+
+            button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+            button_box.accepted.connect(dialog.accept)
+            button_box.rejected.connect(dialog.reject)
+            dialog_layout.addWidget(button_box)
+
+            dialog.setLayout(dialog_layout)
+
+            if dialog.exec_() == QDialog.Accepted:
+                filter_date = date_edit.date().toString("yyyy-MM-dd")
+                for row in range(table_widget.rowCount()):
+                    item = table_widget.item(row, logical_index)
+                    if filter_date not in item.text():
+                        table_widget.setRowHidden(row, True)
+                    else:
+                        table_widget.setRowHidden(row, False)
+        else:
+            # Use QInputDialog for other columns
+            filter_value, ok = QInputDialog.getText(self, "Filter", f"Enter filter value for {column_name}:")
+            if ok:
+                for row in range(table_widget.rowCount()):
+                    item = table_widget.item(row, logical_index)
+                    if filter_value:
+                        if filter_value.lower() not in item.text().lower():
+                            table_widget.setRowHidden(row, True)
+                        else:
+                            table_widget.setRowHidden(row, False)
+                    else:
+                        table_widget.setRowHidden(row, False)
 
 def main():
     app = QApplication(sys.argv)

@@ -36,7 +36,7 @@ Before running the application, ensure you have the following software installed
 
    Install the necessary Python packages:
    ```
-   pip install -r requirements.txt
+   pip install PyQt5
    ```
 
 3. **Configure Database Connection**

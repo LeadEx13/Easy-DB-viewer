@@ -1,12 +1,11 @@
 import sys
+import os
+import csv
 import pymysql
 import configparser
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QLineEdit, QTableWidget, QTableWidgetItem, QComboBox, QGridLayout, QFrame, QPushButton, QHeaderView, QInputDialog, QSizePolicy, QDateEdit, QDialog, QLabel, QDialogButtonBox, QMessageBox)
 from PyQt5.QtCore import pyqtSlot, Qt, QDate
 from datetime import datetime
-import os
-import csv
-import subprocess
 
 class CustomTableWidget(QTableWidget):
     def __init__(self, parent=None):
@@ -137,8 +136,19 @@ class MainWindow(QMainWindow):
 
         # Main result table
         self.result_table = CustomTableWidget()
-        self.result_table.setColumnCount(5)
-        self.result_table.setHorizontalHeaderLabels(["CustomerID", "IsActive", "PackageID", "Description", "Source"])
+        self.result_table.setColumnCount(8)
+        self.result_table.setHorizontalHeaderLabels([
+            "CustomerID", "Type", "PackageID", "Description",
+            "Source", "Distribution", "IsActive", "ExpirationDate"
+        ])
+        header = self.result_table.horizontalHeader()
+        for column in range(self.result_table.columnCount()):
+            if column == 3:  # Assuming "Description" is the 4th column (index 3)
+                header.setSectionResizeMode(column, QHeaderView.Fixed)
+                header.resizeSection(column, 80)  # Set fixed width to 80
+            else:
+                header.setSectionResizeMode(column, QHeaderView.ResizeToContents)
+
         self.result_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.result_table.setSelectionMode(QTableWidget.SingleSelection)
         self.result_table.setMaximumWidth(525)
@@ -158,16 +168,16 @@ class MainWindow(QMainWindow):
         sub_search_layout.addWidget(self.sub_search_combo_box)
 
         self.sub_search_button = QPushButton("Search", self)
-        self.sub_search_button.setMaximumWidth(70)
+        self.sub_search_button.setMaximumWidth(100)
         self.sub_search_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.sub_search_button.clicked.connect(self.sub_search_button_clicked)
         sub_search_layout.addWidget(self.sub_search_button)
 
-        self.export_button_sub = QPushButton("Export", self)
-        self.export_button_sub.setMaximumWidth(70)
-        self.export_button_sub.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        self.export_button_sub.clicked.connect(lambda: self.export_to_csv(self.sub_result_table, self.sub_search_combo_box.currentText()))
-        sub_search_layout.addWidget(self.export_button_sub)
+        self.export_button = QPushButton("Export", self)
+        self.export_button.setMaximumWidth(100)
+        self.export_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.export_button.clicked.connect(lambda: self.export_table_to_csv(self.sub_result_table, self.sub_search_combo_box.currentText()))
+        sub_search_layout.addWidget(self.export_button)
 
         left_layout.addWidget(sub_search_container)
 
@@ -181,9 +191,9 @@ class MainWindow(QMainWindow):
         right_layout = QGridLayout()
 
         # InfoBox3
-        right_layout.addWidget(self.create_info_box("Infobox1", "Option1", "Option2", self.search_button_clicked_info3), 0, 0)
+        right_layout.addWidget(self.create_info_box("Infobox1", "Option1", "Option2", "Option3", "Option4", "Option5", self.search_button_clicked_info3), 0, 0)
         # InfoBox4
-        right_layout.addWidget(self.create_info_box("Infobox2", "Option1", "Option2", self.search_button_clicked_info4), 0, 1)
+        right_layout.addWidget(self.create_info_box("Infobox2", "Option1", "Option2", "Option3", "Option4", "Option5", self.search_button_clicked_info4), 0, 1)
 
         content_layout.addLayout(right_layout)
         main_layout.addLayout(content_layout)
@@ -202,7 +212,7 @@ class MainWindow(QMainWindow):
             'port': int(config['database'].get('port', 3306))
         }
 
-    def create_info_box(self, placeholder, option1, option2, search_button_slot):
+    def create_info_box(self, placeholder, option1, option2, option3, option4, option5, search_button_slot):
         frame = QFrame()
         layout = QVBoxLayout()
         frame.setLayout(layout)
@@ -211,18 +221,18 @@ class MainWindow(QMainWindow):
         combo_box = QComboBox(self)
         combo_box.addItem(option1)
         combo_box.addItem(option2)
+        combo_box.addItem(option3)
+        combo_box.addItem(option4)
+        combo_box.addItem(option5)
         combo_layout.addWidget(combo_box)
 
         search_button = QPushButton("Search", self)
         search_button.setMaximumWidth(70)
-        search_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         search_button.clicked.connect(search_button_slot)
         combo_layout.addWidget(search_button)
 
         export_button = QPushButton("Export", self)
         export_button.setMaximumWidth(70)
-        export_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        export_button.clicked.connect(lambda: self.export_to_csv(frame, combo_box.currentText()))
         combo_layout.addWidget(export_button)
 
         layout.addLayout(combo_layout)
@@ -233,9 +243,11 @@ class MainWindow(QMainWindow):
         if placeholder == "Infobox1":
             self.info_table1 = info_table
             self.combo_box_info3 = combo_box
+            export_button.clicked.connect(lambda: self.export_table_to_csv(self.info_table1, self.combo_box_info3.currentText()))
         else:
             self.info_table2 = info_table
             self.combo_box_info4 = combo_box
+            export_button.clicked.connect(lambda: self.export_table_to_csv(self.info_table2, self.combo_box_info4.currentText()))
 
         return frame
 
@@ -280,20 +292,20 @@ class MainWindow(QMainWindow):
         selected_table = self.sub_search_combo_box.currentText()
 
         if selected_table == "Schedule":
-            self.query_schedule()
+            self.query_event_schedule()
         # Add more elif clauses for other subsearch options
 
-    def query_schedule(self):
+    def query_event_schedule(self):
         try:
             connection = pymysql.connect(**self.connection_config)
             cursor = connection.cursor()
 
             query = """
-                SELECT s.EventId, GROUP_CONCAT(DISTINCT s.ProviderId) AS ProviderIds, f.StartDate
-                FROM DefaultScheduleTable s
-                JOIN DefaultEventsTable f ON s.EventId = f.Id
+                SELECT s.EventID, GROUP_CONCAT(DISTINCT s.ProviderId) AS ProviderIds, f.StartDate
+                FROM data.eventschedule s
+                JOIN data.events f ON s.EventID = f.Id
                 WHERE f.StartDate > NOW()
-                GROUP BY s.EventId, f.StartDate;
+                GROUP BY s.EventID, f.StartDate;
             """
             cursor.execute(query)
             results = cursor.fetchall()
@@ -332,20 +344,14 @@ class MainWindow(QMainWindow):
         cursor = connection.cursor()
 
         query1 = """
-            SELECT CustomerId, IsActive, Id as PackageID, Description
-            FROM DefaultTable1
+            SELECT CustomerId, IsActive, Id as PackageID, Description, ExpirationDate, DistributionEnabled as Distribution, Type
+            FROM default_table1
             WHERE Id = %s OR CustomerId = %s;
         """
 
         query2 = """
-            SELECT CustomerId, IsActive, Id as PackageID, Description
-            FROM DefaultTable2
-            WHERE Id = %s OR CustomerId = %s;
-        """
-
-        query3 = """
-            SELECT CustomerId, IsActive, Id as PackageID, Description
-            FROM DefaultTable3
+            SELECT CustomerId, IsActive, Id as PackageID, Description, ExpirationDate, RmqEnabled as Distribution, HasInPlayOdds as Type
+            FROM default_table2
             WHERE Id = %s OR CustomerId = %s;
         """
 
@@ -356,18 +362,14 @@ class MainWindow(QMainWindow):
             cursor.execute(query2, (search_value, search_value))
             results2 = cursor.fetchall()
 
-            cursor.execute(query3, (search_value, search_value))
-            results3 = cursor.fetchall()
-
             self.result_table.setRowCount(0)
 
-            if not results1 and not results2 and not results3:
+            if not results1 and not results2:
                 self.result_table.setRowCount(1)
                 self.result_table.setItem(0, 0, QTableWidgetItem("No results found."))
             else:
                 self.add_results_to_table(results1, "Source1")
                 self.add_results_to_table(results2, "Source2")
-                self.add_results_to_table(results3, "Source3")
 
             connection.commit()
         except Exception as e:
@@ -382,20 +384,14 @@ class MainWindow(QMainWindow):
         cursor = connection.cursor()
 
         query1 = """
-            SELECT CustomerId, IsActive, Id as PackageID, Description
-            FROM DefaultTable1
+            SELECT CustomerId, IsActive, Id as PackageID, Description, ExpirationDate, DistributionEnabled as Distribution, Type
+            FROM default_table1
             WHERE Description LIKE %s;
         """
 
         query2 = """
-            SELECT CustomerId, IsActive, Id as PackageID, Description
-            FROM DefaultTable2
-            WHERE Description LIKE %s;
-        """
-
-        query3 = """
-            SELECT CustomerId, IsActive, Id as PackageID, Description
-            FROM DefaultTable3
+            SELECT CustomerId, IsActive, Id as PackageID, Description, ExpirationDate, RmqEnabled as Distribution, HasInPlayOdds as Type
+            FROM default_table2
             WHERE Description LIKE %s;
         """
 
@@ -406,18 +402,14 @@ class MainWindow(QMainWindow):
             cursor.execute(query2, ('%' + search_text + '%',))
             results2 = cursor.fetchall()
 
-            cursor.execute(query3, ('%' + search_text + '%',))
-            results3 = cursor.fetchall()
-
             self.result_table.setRowCount(0)
 
-            if not results1 and not results2 and not results3:
+            if not results1 and not results2:
                 self.result_table.setRowCount(1)
                 self.result_table.setItem(0, 0, QTableWidgetItem("No results found."))
             else:
                 self.add_results_to_table(results1, "Source1")
                 self.add_results_to_table(results2, "Source2")
-                self.add_results_to_table(results3, "Source3")
 
             connection.commit()
         except Exception as e:
@@ -431,12 +423,17 @@ class MainWindow(QMainWindow):
         for row in results:
             row_position = self.result_table.rowCount()
             self.result_table.insertRow(row_position)
-            self.result_table.setItem(row_position, 0, QTableWidgetItem(str(row[0])))
+            self.result_table.setItem(row_position, 0, QTableWidgetItem(str(row[0])))  # CustomerID
+            type_value = 'Live' if row[6] in [b'\x01', 1] else 'NoLive'
+            self.result_table.setItem(row_position, 1, QTableWidgetItem(type_value))  # Type
+            self.result_table.setItem(row_position, 2, QTableWidgetItem(str(row[2])))  # PackageID
+            self.result_table.setItem(row_position, 3, QTableWidgetItem(str(row[3])))  # Description
+            self.result_table.setItem(row_position, 4, QTableWidgetItem(source))  # Source
+            distribution_value = 'Yes' if row[5] == b'\x01' else 'No'
+            self.result_table.setItem(row_position, 5, QTableWidgetItem(distribution_value))  # Distribution
             is_active = 'Yes' if row[1] == b'\x01' else 'No'
-            self.result_table.setItem(row_position, 1, QTableWidgetItem(is_active))
-            self.result_table.setItem(row_position, 2, QTableWidgetItem(str(row[2])))
-            self.result_table.setItem(row_position, 3, QTableWidgetItem(str(row[3])))
-            self.result_table.setItem(row_position, 4, QTableWidgetItem(source))
+            self.result_table.setItem(row_position, 6, QTableWidgetItem(is_active))  # IsActive
+            self.result_table.setItem(row_position, 7, QTableWidgetItem(str(row[4])))  # ExpirationDate
 
     def filter_results(self):
         customer_id_filter = self.customer_id_search.text()
@@ -460,31 +457,152 @@ class MainWindow(QMainWindow):
 
     def handle_selection_async(self, selection, infobox, package_id):
         if selection == "Option1":
-            self.query_subscription_and_event_async("DefaultSubscriptionTable1", infobox, package_id)
+            self.query_subscription_and_event_async("default_subscription_table1", infobox, package_id)
         elif selection == "Option2":
-            self.query_subscription_and_event_async("DefaultSubscriptionTable2", infobox, package_id)
+            self.query_subscription_and_event_async("default_subscription_table2", infobox, package_id)
+        elif selection == "Option3":
+            self.query_web_notifications_async(infobox, package_id)
+        elif selection == "Option4":
+            self.query_subscriptions_async(infobox, package_id)
+        elif selection == "Option5":
+            self.query_customer_setting_changes_async(infobox, package_id)
+
+    def export_table_to_csv(self, table, table_name):
+        try:
+            folder_path = os.path.join(os.path.expanduser("~"), "Documents", "Easy DB viewer")
+            os.makedirs(folder_path, exist_ok=True)
+            file_name = f"{table_name}_export_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
+            file_path = os.path.join(folder_path, file_name)
+
+            with open(file_path, mode='w', newline='', encoding='utf-8') as file:
+                writer = csv.writer(file)
+                header = [table.horizontalHeaderItem(col).text() for col in range(table.columnCount())]
+                writer.writerow(header)
+                for row in range(table.rowCount()):
+                    if table.isRowHidden(row):
+                        continue  # Skip hidden rows
+                    row_data = [table.item(row, col).text() if table.item(row, col) else '' for col in
+                                range(table.columnCount())]
+                    writer.writerow(row_data)
+
+            msg = QMessageBox()
+            msg.setIcon(QMessageBox.Information)
+            msg.setText(f"Export Successful\nFile saved to: {file_path}")
+            msg.setWindowTitle("Export Status")
+            msg.setStandardButtons(QMessageBox.Ok | QMessageBox.Open)
+            if msg.exec_() == QMessageBox.Open:
+                os.startfile(folder_path)
+
+        except Exception as e:
+            print(f"Export error: {e}")
+            msg = QMessageBox()
+            msg.setIcon(QMessageBox.Critical)
+            msg.setText(f"Export Failed\nError: {str(e)}")
+            msg.setWindowTitle("Export Status")
+            msg.exec_()
 
     def query_subscription_and_event_async(self, subscription_table, infobox, package_id):
         try:
             connection = pymysql.connect(**self.connection_config)
             cursor = connection.cursor()
 
-            if subscription_table == "DefaultSubscriptionTable1":
+            if subscription_table == "default_subscription_table1":
                 query = f"""
-                    SELECT x.EventId as EventID, x.IsAutoAdded, x.IsDeleted, x.SubscriptionStatus, x.CreationDate, x.LastUpdate
+                    SELECT x.EventID, x.IsAutoAdded, x.IsDeleted, x.SubscriptionStatus, x.CreationDate, x.LastUpdate
                     FROM {subscription_table} x
-                    JOIN DefaultEventTable f ON x.EventId = f.Id
+                    JOIN default_event_table f ON x.EventID = f.Id
                     WHERE x.PackageId = %s AND f.StartDate > NOW() - INTERVAL 14 DAY;
                 """
                 columns = ["EventID", "IsAutoAdded", "IsDeleted", "SubscriptionStatus", "CreationDate", "LastUpdate"]
             else:
                 query = f"""
-                    SELECT x.EventId as EventID, x.CreationDate
+                    SELECT x.EventID, x.CreationDate
                     FROM {subscription_table} x
-                    JOIN DefaultEventTable f ON x.EventId = f.Id
+                    JOIN default_event_table f ON x.EventID = f.Id
                     WHERE x.PackageId = %s AND f.StartDate > NOW() - INTERVAL 14 DAY;
                 """
                 columns = ["EventID", "CreationDate"]
+
+            cursor.execute(query, (package_id,))
+            filtered_results = cursor.fetchall()
+
+            connection.commit()
+
+        except pymysql.MySQLError as e:
+            filtered_results = []
+        except Exception as e:
+            filtered_results = []
+        finally:
+            cursor.close()
+            connection.close()
+
+        self.display_results_in_infobox(filtered_results, infobox, columns)
+
+    def query_web_notifications_async(self, infobox, package_id):
+        try:
+            connection = pymysql.connect(**self.connection_config)
+            cursor = connection.cursor()
+
+            query = """
+                SELECT Header, Body, CreationDate
+                FROM default_webnotifications
+                WHERE PackageId = %s;
+            """
+            columns = ["Header", "Body", "CreationDate"]
+
+            cursor.execute(query, (package_id,))
+            filtered_results = cursor.fetchall()
+
+            connection.commit()
+
+        except pymysql.MySQLError as e:
+            filtered_results = []
+        except Exception as e:
+            filtered_results = []
+        finally:
+            cursor.close()
+            connection.close()
+
+        self.display_results_in_infobox(filtered_results, infobox, columns)
+
+    def query_subscriptions_async(self, infobox, package_id):
+        try:
+            connection = pymysql.connect(**self.connection_config)
+            cursor = connection.cursor()
+
+            query = """
+                SELECT SportId, LocationId, LeagueId, CreationDate, IsLive
+                FROM default_subscriptions
+                WHERE PackageId = %s;
+            """
+            columns = ["SportId", "LocationId", "LeagueId", "CreationDate", "IsLive"]
+
+            cursor.execute(query, (package_id,))
+            filtered_results = cursor.fetchall()
+
+            connection.commit()
+
+        except pymysql.MySQLError as e:
+            filtered_results = []
+        except Exception as e:
+            filtered_results = []
+        finally:
+            cursor.close()
+            connection.close()
+
+        self.display_results_in_infobox(filtered_results, infobox, columns)
+
+    def query_customer_setting_changes_async(self, infobox, package_id):
+        try:
+            connection = pymysql.connect(**self.connection_config)
+            cursor = connection.cursor()
+
+            query = """
+                SELECT ChangeId, ChangeField, NewValue, OldValue, CreationDate
+                FROM default_customersettingchanges
+                WHERE PackageId = %s;
+            """
+            columns = ["ChangeId", "ChangeField", "NewValue", "OldValue", "CreationDate"]
 
             cursor.execute(query, (package_id,))
             filtered_results = cursor.fetchall()
@@ -511,48 +629,9 @@ class MainWindow(QMainWindow):
             row_position = info_table.rowCount()
             info_table.insertRow(row_position)
             for col_idx, col_val in enumerate(row):
-                if columns[col_idx] in ["IsAutoAdded", "IsDeleted"]:
+                if columns[col_idx] in ["IsAutoAdded", "IsDeleted", "IsLive"]:
                     col_val = "Yes" if col_val == b'\x01' else "No"
                 info_table.setItem(row_position, col_idx, QTableWidgetItem(str(col_val)))
-
-    def export_to_csv(self, table, selected_table):
-        folder_path = os.path.join(os.path.expanduser("~"), "Documents", "Easy DB viewer")
-        os.makedirs(folder_path, exist_ok=True)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        file_name = f"{selected_table}_{timestamp}.csv"
-        file_path = os.path.join(folder_path, file_name)
-
-        with open(file_path, mode='w', newline='', encoding='utf-8') as file:
-            writer = csv.writer(file)
-            # Write header
-            headers = [table.horizontalHeaderItem(col).text() for col in range(table.columnCount())]
-            writer.writerow(headers)
-            # Write data
-            for row in range(table.rowCount()):
-                row_data = [table.item(row, col).text() for col in range(table.columnCount())]
-                writer.writerow(row_data)
-
-        self.show_export_success_message(file_path)
-
-    def show_export_success_message(self, file_path):
-        msg_box = QMessageBox()
-        msg_box.setWindowTitle("Export Successful")
-        msg_box.setText(f"Data successfully exported to:\n{file_path}")
-        msg_box.setStandardButtons(QMessageBox.Ok)
-        open_folder_button = msg_box.addButton("Open Folder", QMessageBox.ActionRole)
-        msg_box.exec_()
-
-        if msg_box.clickedButton() == open_folder_button:
-            folder_path = os.path.dirname(file_path)
-            self.open_folder(folder_path)
-
-    def open_folder(self, folder_path):
-        if sys.platform == 'win32':
-            os.startfile(folder_path)
-        elif sys.platform == 'darwin':
-            subprocess.Popen(['open', folder_path])
-        else:
-            subprocess.Popen(['xdg-open', folder_path])
 
 def main():
     app = QApplication(sys.argv)

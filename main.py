@@ -21,7 +21,7 @@ class MainWindow(QMainWindow):
 
         # Top control area
         self.search_textbox = QLineEdit(self)
-        self.search_textbox.setPlaceholderText("Search by Id")
+        self.search_textbox.setPlaceholderText("Search by Id, CustomerId, or Description")
         self.search_textbox.returnPressed.connect(self.search_textbox_keydown)
         main_layout.addWidget(self.search_textbox)
 
@@ -31,14 +31,34 @@ class MainWindow(QMainWindow):
         # Left side - search results and subresults
         left_layout = QVBoxLayout()
 
-        search_info_textbox1 = QLineEdit(self)
-        search_info_textbox1.setPlaceholderText("Search inside Result...")
-        left_layout.addWidget(search_info_textbox1)
+        # Search boxes for each column
+        search_boxes_layout = QHBoxLayout()
+        self.customer_id_search = QLineEdit(self)
+        self.customer_id_search.setPlaceholderText("Search CustomerID")
+        self.customer_id_search.textChanged.connect(self.filter_results)
+        search_boxes_layout.addWidget(self.customer_id_search)
+
+        self.is_active_search = QLineEdit(self)
+        self.is_active_search.setPlaceholderText("Search IsActive")
+        self.is_active_search.textChanged.connect(self.filter_results)
+        search_boxes_layout.addWidget(self.is_active_search)
+
+        self.package_id_search = QLineEdit(self)
+        self.package_id_search.setPlaceholderText("Search PackageID")
+        self.package_id_search.textChanged.connect(self.filter_results)
+        search_boxes_layout.addWidget(self.package_id_search)
+
+        self.description_search = QLineEdit(self)
+        self.description_search.setPlaceholderText("Search Description")
+        self.description_search.textChanged.connect(self.filter_results)
+        search_boxes_layout.addWidget(self.description_search)
+
+        left_layout.addLayout(search_boxes_layout)
 
         self.result_table = QTableWidget()
-        self.result_table.setColumnCount(5)
-        # Update header labels with generic names
-        self.result_table.setHorizontalHeaderLabels(["ID", "Attribute1", "Attribute2", "Attribute3", "Description"])
+        self.result_table.setColumnCount(4)
+        # Updated header labels with generic names
+        self.result_table.setHorizontalHeaderLabels(["CustomerID", "IsActive", "PackageID", "Description"])
         left_layout.addWidget(self.result_table)
 
         search_info_textbox2 = QLineEdit(self)
@@ -110,7 +130,10 @@ class MainWindow(QMainWindow):
     def search_textbox_keydown(self):
         search_text = self.search_textbox.text()
         print(f"Search triggered for: {search_text}")
-        self.search_database_for_info(search_text)
+        if search_text.isdigit():
+            self.search_database_for_numeric_info(search_text)
+        else:
+            self.search_database_for_text_info(search_text)
 
     @pyqtSlot()
     def combobox_info3_selection_changed(self):
@@ -124,53 +147,38 @@ class MainWindow(QMainWindow):
         print(f"Selection changed to: {selection}")
         self.handle_selection_async(selection, "Infobox2")
 
-    def search_database_for_info(self, search_id):
+    def search_database_for_numeric_info(self, search_value):
         connection = pymysql.connect(**self.connection_config)
         cursor = connection.cursor()
 
         # Update queries with generic table and column names
         query1 = """
-            SELECT ID, Attribute1, Attribute2
+            SELECT CustomerID, IsActive, PackageID, Description
             FROM DefaultTable1
-            WHERE ID = %s;
+            WHERE PackageID = %s OR CustomerID = %s;
         """
 
         query2 = """
-            SELECT Attribute3, Description
+            SELECT CustomerID, IsActive, PackageID, Description
             FROM DefaultTable2
-            WHERE ID = %s;
+            WHERE PackageID = %s OR CustomerID = %s;
         """
 
         try:
-            # Execute first query
-            cursor.execute(query1, (search_id,))
+            cursor.execute(query1, (search_value, search_value))
             results1 = cursor.fetchall()
 
-            # Execute second query
-            cursor.execute(query2, (search_id,))
+            cursor.execute(query2, (search_value, search_value))
             results2 = cursor.fetchall()
 
             self.result_table.setRowCount(0)
 
-            if not results1:
+            if not results1 and not results2:
                 self.result_table.setRowCount(1)
                 self.result_table.setItem(0, 0, QTableWidgetItem("No results found."))
             else:
-                for row in results1:
-                    row_position = self.result_table.rowCount()
-                    self.result_table.insertRow(row_position)
-                    self.result_table.setItem(row_position, 0, QTableWidgetItem(str(row[0])))
-                    self.result_table.setItem(row_position, 1, QTableWidgetItem(str(row[1])))
-                    self.result_table.setItem(row_position, 2, QTableWidgetItem(str(row[2])))
-
-                if results2:
-                    for i, row in enumerate(results2):
-                        self.result_table.setItem(i, 3, QTableWidgetItem(str(row[0])))
-                        self.result_table.setItem(i, 4, QTableWidgetItem(str(row[1])))
-                else:
-                    for i in range(self.result_table.rowCount()):
-                        self.result_table.setItem(i, 3, QTableWidgetItem("N/A"))
-                        self.result_table.setItem(i, 4, QTableWidgetItem("N/A"))
+                self.add_results_to_table(results1)
+                self.add_results_to_table(results2)
 
             connection.commit()
         except Exception as e:
@@ -181,25 +189,96 @@ class MainWindow(QMainWindow):
             cursor.close()
             connection.close()
 
-    def handle_selection_async(self, selection, infobox):
-        # Handle selection changes in the comboboxes
-        if selection == "Option1":
-            self.query_subscription_and_fixture_async("DefaultTable1", infobox)
-        elif selection == "Option2":
-            self.query_subscription_and_fixture_async("DefaultTable2", infobox)
+    def search_database_for_text_info(self, search_text):
+        connection = pymysql.connect(**self.connection_config)
+        cursor = connection.cursor()
 
-    def query_subscription_and_fixture_async(self, subscription_table, infobox):
+        # Update queries with generic table and column names
+        query1 = """
+            SELECT CustomerID, IsActive, PackageID, Description
+            FROM DefaultTable1
+            WHERE Description LIKE %s;
+        """
+
+        query2 = """
+            SELECT CustomerID, IsActive, PackageID, Description
+            FROM DefaultTable2
+            WHERE Description LIKE %s;
+        """
+
+        try:
+            cursor.execute(query1, ('%' + search_text + '%',))
+            results1 = cursor.fetchall()
+
+            cursor.execute(query2, ('%' + search_text + '%',))
+            results2 = cursor.fetchall()
+
+            self.result_table.setRowCount(0)
+
+            if not results1 and not results2:
+                self.result_table.setRowCount(1)
+                self.result_table.setItem(0, 0, QTableWidgetItem("No results found."))
+            else:
+                self.add_results_to_table(results1)
+                self.add_results_to_table(results2)
+
+            connection.commit()
+        except Exception as e:
+            print(f"Error querying database: {e}")
+            self.result_table.setRowCount(1)
+            self.result_table.setItem(0, 0, QTableWidgetItem("Error querying database. Check console for details."))
+        finally:
+            cursor.close()
+            connection.close()
+
+    def add_results_to_table(self, results):
+        for row in results:
+            row_position = self.result_table.rowCount()
+            self.result_table.insertRow(row_position)
+            self.result_table.setItem(row_position, 0, QTableWidgetItem(str(row[0])))
+            is_active = 'Yes' if row[1] == b'\x01' else 'No'
+            self.result_table.setItem(row_position, 1, QTableWidgetItem(is_active))
+            self.result_table.setItem(row_position, 2, QTableWidgetItem(str(row[2])))
+            self.result_table.setItem(row_position, 3, QTableWidgetItem(str(row[3])))
+
+    def filter_results(self):
+        customer_id_filter = self.customer_id_search.text()
+        is_active_filter = self.is_active_search.text().lower()
+        package_id_filter = self.package_id_search.text()
+        description_filter = self.description_search.text().lower()
+
+        for row in range(self.result_table.rowCount()):
+            customer_id_item = self.result_table.item(row, 0)
+            is_active_item = self.result_table.item(row, 1)
+            package_id_item = self.result_table.item(row, 2)
+            description_item = self.result_table.item(row, 3)
+
+            customer_id_visible = customer_id_filter in customer_id_item.text()
+            is_active_visible = is_active_filter in is_active_item.text().lower()
+            package_id_visible = package_id_filter in package_id_item.text()
+            description_visible = description_filter in description_item.text().lower()
+
+            is_row_visible = customer_id_visible and is_active_visible and package_id_visible and description_visible
+            self.result_table.setRowHidden(row, not is_row_visible)
+
+    def handle_selection_async(self, selection, infobox):
+        if selection == "Option1":
+            self.query_subscription_and_event_async("DefaultTable1", infobox)
+        elif selection == "Option2":
+            self.query_subscription_and_event_async("DefaultTable2", infobox)
+
+    def query_subscription_and_event_async(self, subscription_table, infobox):
         search_term = self.search_textbox.text()
         connection = pymysql.connect(**self.connection_config)
         cursor = connection.cursor()
 
-        fixture_ids = []
+        event_ids = []
 
         try:
-            cursor.execute(f"SELECT ID FROM {subscription_table} WHERE ID = %s", (search_term,))
+            cursor.execute(f"SELECT EventID FROM {subscription_table} WHERE PackageID = %s", (search_term,))
             results = cursor.fetchall()
 
-            fixture_ids = [row[0] for row in results]
+            event_ids = [row[0] for row in results]
 
             connection.commit()
         except Exception as e:
@@ -208,26 +287,26 @@ class MainWindow(QMainWindow):
             cursor.close()
             connection.close()
 
-        for fixture_id in fixture_ids:
-            self.query_fixture_details_async(fixture_id, infobox)
+        for event_id in event_ids:
+            self.query_event_details_async(event_id, infobox)
 
-    def query_fixture_details_async(self, fixture_id, infobox):
+    def query_event_details_async(self, event_id, infobox):
         connection = pymysql.connect(**self.connection_config)
         cursor = connection.cursor()
 
         try:
-            cursor.execute("SELECT * FROM DefaultTable3 WHERE ID = %s", (fixture_id,))
+            cursor.execute("SELECT * FROM DefaultTable3 WHERE EventID = %s", (event_id,))
             results = cursor.fetchall()
 
             for row in results:
                 if infobox == "Infobox1":
-                    self.info_textbox3.append(f"Fixture ID: {fixture_id}, Details: {row}")
+                    self.info_textbox3.append(f"Event ID: {event_id}, Details: {row}")
                 else:
-                    self.info_textbox4.append(f"Fixture ID: {fixture_id}, Details: {row}")
+                    self.info_textbox4.append(f"Event ID: {event_id}, Details: {row}")
 
             connection.commit()
         except Exception as e:
-            print(f"Error querying fixture details: {e}")
+            print(f"Error querying event details: {e}")
         finally:
             cursor.close()
             connection.close()

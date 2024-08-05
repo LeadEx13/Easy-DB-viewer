@@ -5,12 +5,15 @@ import pymysql
 import configparser
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QLineEdit, QTableWidget, QTableWidgetItem, QComboBox, QGridLayout, QFrame, QPushButton, QHeaderView, QInputDialog, QSizePolicy, QDateEdit, QDialog, QLabel, QDialogButtonBox, QMessageBox)
 from PyQt5.QtCore import pyqtSlot, Qt, QDate
+from PyQt5.QtGui import QIcon, QPalette, QColor
 from datetime import datetime
 
 class CustomTableWidget(QTableWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setSortingEnabled(True)
+
+        # Enable context menu for right-click events
         self.horizontalHeader().setContextMenuPolicy(Qt.CustomContextMenu)
         self.horizontalHeader().customContextMenuRequested.connect(self.handle_header_context_menu)
 
@@ -73,12 +76,27 @@ class CustomTableWidget(QTableWidget):
         else:
             self.horizontalHeader().setSortIndicator(column, Qt.AscendingOrder)
 
+class LoadingDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Loading")
+        self.setModal(True)
+        self.setFixedSize(300, 100)  # Increased size for better visibility
+        self.layout = QVBoxLayout(self)
+        self.label = QLabel("Loading...", self)
+        self.layout.addWidget(self.label)
+
+    def update_message(self, message):
+        self.label.setText(message)
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
         self.setWindowTitle("Easy DB viewer")
         self.setGeometry(100, 100, 1024, 720)
+
+        self.loading_dialog = LoadingDialog(self)
 
         main_widget = QWidget()
         self.setCentralWidget(main_widget)
@@ -87,12 +105,15 @@ class MainWindow(QMainWindow):
         main_widget.setLayout(main_layout)
 
         # Top control area
+        top_bar_layout = QHBoxLayout()
+        main_layout.addLayout(top_bar_layout)
+
         self.search_textbox = QLineEdit(self)
         self.search_textbox.setPlaceholderText("Search by Id, CustomerId, or Description")
         self.search_textbox.setMaximumWidth(525)
         self.search_textbox.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.search_textbox.returnPressed.connect(self.search_textbox_keydown)
-        main_layout.addWidget(self.search_textbox)
+        top_bar_layout.addWidget(self.search_textbox)
 
         # Main content area
         content_layout = QHBoxLayout()
@@ -163,7 +184,7 @@ class MainWindow(QMainWindow):
         sub_search_container.setLayout(sub_search_layout)
 
         self.sub_search_combo_box = QComboBox(self)
-        self.sub_search_combo_box.addItem("Schedule")
+        self.sub_search_combo_box.addItem("Event Schedule")
         # Add more items as needed here...
         sub_search_layout.addWidget(self.sub_search_combo_box)
 
@@ -200,6 +221,9 @@ class MainWindow(QMainWindow):
 
         # Load database configuration from config.ini
         self.load_database_config()
+
+        # Apply the dark mode initially
+        self.set_dark_mode()
 
     def load_database_config(self):
         config = configparser.ConfigParser()
@@ -290,8 +314,10 @@ class MainWindow(QMainWindow):
     @pyqtSlot()
     def sub_search_button_clicked(self):
         selected_table = self.sub_search_combo_box.currentText()
+        self.loading_dialog.update_message(f"Loading {selected_table}...")
+        self.loading_dialog.show()
 
-        if selected_table == "Schedule":
+        if selected_table == "Event Schedule":
             self.query_event_schedule()
         # Add more elif clauses for other subsearch options
 
@@ -301,11 +327,11 @@ class MainWindow(QMainWindow):
             cursor = connection.cursor()
 
             query = """
-                SELECT s.EventID, GROUP_CONCAT(DISTINCT s.ProviderId) AS ProviderIds, f.StartDate
-                FROM data.eventschedule s
-                JOIN data.events f ON s.EventID = f.Id
+                SELECT s.EventId, GROUP_CONCAT(DISTINCT s.ProviderId) AS ProviderIds, f.StartDate
+                FROM default_event_schedule s
+                JOIN default_events f ON s.EventId = f.Id
                 WHERE f.StartDate > NOW()
-                GROUP BY s.EventID, f.StartDate;
+                GROUP BY s.EventId, f.StartDate;
             """
             cursor.execute(query)
             results = cursor.fetchall()
@@ -339,7 +365,12 @@ class MainWindow(QMainWindow):
             for col_idx, col_val in enumerate(row):
                 self.sub_result_table.setItem(row_position, col_idx, QTableWidgetItem(str(col_val)))
 
+        self.loading_dialog.close()
+
     def search_database_for_numeric_info(self, search_value):
+        self.loading_dialog.update_message("Loading search results...")
+        self.loading_dialog.show()
+
         connection = pymysql.connect(**self.connection_config)
         cursor = connection.cursor()
 
@@ -379,7 +410,12 @@ class MainWindow(QMainWindow):
             cursor.close()
             connection.close()
 
+        self.loading_dialog.close()
+
     def search_database_for_text_info(self, search_text):
+        self.loading_dialog.update_message("Loading search results...")
+        self.loading_dialog.show()
+
         connection = pymysql.connect(**self.connection_config)
         cursor = connection.cursor()
 
@@ -419,12 +455,14 @@ class MainWindow(QMainWindow):
             cursor.close()
             connection.close()
 
+        self.loading_dialog.close()
+
     def add_results_to_table(self, results, source):
         for row in results:
             row_position = self.result_table.rowCount()
             self.result_table.insertRow(row_position)
             self.result_table.setItem(row_position, 0, QTableWidgetItem(str(row[0])))  # CustomerID
-            type_value = 'Live' if row[6] in [b'\x01', 1] else 'NoLive'
+            type_value = 'Live' if row[6] in [b'\x01', 1] else 'Pre-event'
             self.result_table.setItem(row_position, 1, QTableWidgetItem(type_value))  # Type
             self.result_table.setItem(row_position, 2, QTableWidgetItem(str(row[2])))  # PackageID
             self.result_table.setItem(row_position, 3, QTableWidgetItem(str(row[3])))  # Description
@@ -456,10 +494,13 @@ class MainWindow(QMainWindow):
             self.result_table.setRowHidden(row, not is_row_visible)
 
     def handle_selection_async(self, selection, infobox, package_id):
+        self.loading_dialog.update_message(f"Loading {selection} data...")
+        self.loading_dialog.show()
+
         if selection == "Option1":
-            self.query_subscription_and_event_async("default_subscription_table1", infobox, package_id)
+            self.query_subscription_and_fixture_async("default_table3", infobox, package_id)
         elif selection == "Option2":
-            self.query_subscription_and_event_async("default_subscription_table2", infobox, package_id)
+            self.query_subscription_and_fixture_async("default_table4", infobox, package_id)
         elif selection == "Option3":
             self.query_web_notifications_async(infobox, package_id)
         elif selection == "Option4":
@@ -501,24 +542,24 @@ class MainWindow(QMainWindow):
             msg.setWindowTitle("Export Status")
             msg.exec_()
 
-    def query_subscription_and_event_async(self, subscription_table, infobox, package_id):
+    def query_subscription_and_fixture_async(self, subscription_table, infobox, package_id):
         try:
             connection = pymysql.connect(**self.connection_config)
             cursor = connection.cursor()
 
-            if subscription_table == "default_subscription_table1":
+            if subscription_table == "default_table3":
                 query = f"""
-                    SELECT x.EventID, x.IsAutoAdded, x.IsDeleted, x.SubscriptionStatus, x.CreationDate, x.LastUpdate
+                    SELECT x.EventId as EventID, x.IsAutoAdded, x.IsDeleted, x.SubscriptionStatus, x.CreationDate, x.LastUpdate
                     FROM {subscription_table} x
-                    JOIN default_event_table f ON x.EventID = f.Id
+                    JOIN default_events f ON x.EventId = f.Id
                     WHERE x.PackageId = %s AND f.StartDate > NOW() - INTERVAL 14 DAY;
                 """
                 columns = ["EventID", "IsAutoAdded", "IsDeleted", "SubscriptionStatus", "CreationDate", "LastUpdate"]
             else:
                 query = f"""
-                    SELECT x.EventID, x.CreationDate
+                    SELECT x.EventId as EventID, x.CreationDate
                     FROM {subscription_table} x
-                    JOIN default_event_table f ON x.EventID = f.Id
+                    JOIN default_events f ON x.EventId = f.Id
                     WHERE x.PackageId = %s AND f.StartDate > NOW() - INTERVAL 14 DAY;
                 """
                 columns = ["EventID", "CreationDate"]
@@ -546,7 +587,7 @@ class MainWindow(QMainWindow):
             query = """
                 SELECT Header, Body, CreationDate
                 FROM default_webnotifications
-                WHERE PackageId = %s;
+                WHERE PackageId = %s AND CreationDate >= NOW() - INTERVAL 1 MONTH;
             """
             columns = ["Header", "Body", "CreationDate"]
 
@@ -571,11 +612,11 @@ class MainWindow(QMainWindow):
             cursor = connection.cursor()
 
             query = """
-                SELECT SportId, LocationId, LeagueId, CreationDate, IsLive
+                SELECT SportId, LocationId, LeagueId, CreationDate, IsInPlay
                 FROM default_subscriptions
-                WHERE PackageId = %s;
+                WHERE PackageId = %s AND CreationDate >= NOW() - INTERVAL 1 MONTH;
             """
-            columns = ["SportId", "LocationId", "LeagueId", "CreationDate", "IsLive"]
+            columns = ["SportId", "LocationId", "LeagueId", "CreationDate", "IsInPlay"]
 
             cursor.execute(query, (package_id,))
             filtered_results = cursor.fetchall()
@@ -598,11 +639,11 @@ class MainWindow(QMainWindow):
             cursor = connection.cursor()
 
             query = """
-                SELECT ChangeId, ChangeField, NewValue, OldValue, CreationDate
-                FROM default_customersettingchanges
-                WHERE PackageId = %s;
+                SELECT ChangedID, ChangedField, NewValue, OldValue, CreationDate
+                FROM default_setting_changes
+                WHERE PackageId = %s AND CreationDate >= NOW() - INTERVAL 1 MONTH;
             """
-            columns = ["ChangeId", "ChangeField", "NewValue", "OldValue", "CreationDate"]
+            columns = ["ChangedID", "ChangedField", "NewValue", "OldValue", "CreationDate"]
 
             cursor.execute(query, (package_id,))
             filtered_results = cursor.fetchall()
@@ -629,11 +670,51 @@ class MainWindow(QMainWindow):
             row_position = info_table.rowCount()
             info_table.insertRow(row_position)
             for col_idx, col_val in enumerate(row):
-                if columns[col_idx] in ["IsAutoAdded", "IsDeleted", "IsLive"]:
+                if columns[col_idx] in ["IsAutoAdded", "IsDeleted", "IsInPlay"]:
                     col_val = "Yes" if col_val == b'\x01' else "No"
                 info_table.setItem(row_position, col_idx, QTableWidgetItem(str(col_val)))
 
+        self.loading_dialog.close()
+
+    #light mode that currently not in use
+    def set_light_mode(self):
+        app.setStyle('Fusion')
+        palette = QPalette()
+        palette.setColor(QPalette.Window, QColor(240, 240, 240))
+        palette.setColor(QPalette.WindowText, Qt.black)
+        palette.setColor(QPalette.Base, QColor(255, 255, 255))
+        palette.setColor(QPalette.AlternateBase, QColor(240, 240, 240))
+        palette.setColor(QPalette.ToolTipBase, Qt.black)
+        palette.setColor(QPalette.ToolTipText, Qt.black)
+        palette.setColor(QPalette.Text, Qt.black)
+        palette.setColor(QPalette.Button, QColor(240, 240, 240))
+        palette.setColor(QPalette.ButtonText, Qt.black)
+        palette.setColor(QPalette.BrightText, Qt.red)
+        palette.setColor(QPalette.Link, QColor(42, 130, 218))
+        palette.setColor(QPalette.Highlight, QColor(42, 130, 218))
+        palette.setColor(QPalette.HighlightedText, Qt.black)
+        app.setPalette(palette)
+
+    def set_dark_mode(self):
+        app.setStyle('Fusion')
+        palette = QPalette()
+        palette.setColor(QPalette.Window, QColor(53, 53, 53))
+        palette.setColor(QPalette.WindowText, Qt.white)
+        palette.setColor(QPalette.Base, QColor(35, 35, 35))
+        palette.setColor(QPalette.AlternateBase, QColor(53, 53, 53))
+        palette.setColor(QPalette.ToolTipBase, Qt.white)
+        palette.setColor(QPalette.ToolTipText, Qt.white)
+        palette.setColor(QPalette.Text, Qt.white)
+        palette.setColor(QPalette.Button, QColor(53, 53, 53))
+        palette.setColor(QPalette.ButtonText, Qt.white)
+        palette.setColor(QPalette.BrightText, Qt.red)
+        palette.setColor(QPalette.Link, QColor(42, 130, 218))
+        palette.setColor(QPalette.Highlight, QColor(42, 130, 218))
+        palette.setColor(QPalette.HighlightedText, Qt.black)
+        app.setPalette(palette)
+
 def main():
+    global app
     app = QApplication(sys.argv)
     window = MainWindow()
     window.show()

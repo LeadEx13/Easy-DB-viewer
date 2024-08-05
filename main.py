@@ -3,6 +3,76 @@ import pymysql
 import configparser
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QLineEdit, QTextEdit, QComboBox, QGridLayout, QFrame, QTableWidget, QTableWidgetItem, QPushButton, QHeaderView, QInputDialog, QSizePolicy, QDateEdit, QDialog, QLabel, QDialogButtonBox)
 from PyQt5.QtCore import pyqtSlot, Qt, QDate
+from PyQt5.QtGui import QIcon, QPixmap
+from datetime import datetime, timedelta
+
+class CustomTableWidget(QTableWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setSortingEnabled(True)
+
+        # Enable context menu for right-click events
+        self.horizontalHeader().setContextMenuPolicy(Qt.CustomContextMenu)
+        self.horizontalHeader().customContextMenuRequested.connect(self.handle_header_context_menu)
+
+    def handle_header_context_menu(self, pos):
+        logical_index = self.horizontalHeader().logicalIndexAt(pos)
+        self.filter_column(logical_index)
+
+    def filter_column(self, column):
+        column_name = self.horizontalHeaderItem(column).text()
+        if column_name in ["CreationDate", "LastUpdate"]:
+            self.filter_by_date(column, column_name)
+        else:
+            filter_value, ok = QInputDialog.getText(self, "Filter", f"Enter filter value for {column_name}:")
+            if ok:
+                for row in range(self.rowCount()):
+                    item = self.item(row, column)
+                    if filter_value:
+                        if filter_value.lower() not in item.text().lower():
+                            self.setRowHidden(row, True)
+                        else:
+                            self.setRowHidden(row, False)
+                    else:
+                        self.setRowHidden(row, False)
+
+    def filter_by_date(self, column, column_name):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Select Date")
+        dialog_layout = QVBoxLayout()
+
+        label = QLabel(f"Select a date for {column_name}:")
+        dialog_layout.addWidget(label)
+
+        date_edit = QDateEdit(dialog)
+        date_edit.setCalendarPopup(True)
+        date_edit.setDate(QDate.currentDate())
+        date_edit.setDisplayFormat("yyyy-MM-dd")
+        dialog_layout.addWidget(date_edit)
+
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        button_box.accepted.connect(dialog.accept)
+        button_box.rejected.connect(dialog.reject)
+        dialog_layout.addWidget(button_box)
+
+        dialog.setLayout(dialog_layout)
+
+        if dialog.exec_() == QDialog.Accepted:
+            filter_date = date_edit.date().toString("yyyy-MM-dd")
+            for row in range(self.rowCount()):
+                item = self.item(row, column)
+                if filter_date not in item.text():
+                    self.setRowHidden(row, True)
+                else:
+                    self.setRowHidden(row, False)
+
+    def sort_column(self, column):
+        sort_order = self.horizontalHeader().sortIndicatorOrder()
+        self.sortItems(column, sort_order)
+        if sort_order == Qt.AscendingOrder:
+            self.horizontalHeader().setSortIndicator(column, Qt.DescendingOrder)
+        else:
+            self.horizontalHeader().setSortIndicator(column, Qt.AscendingOrder)
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -66,7 +136,7 @@ class MainWindow(QMainWindow):
         left_layout.addWidget(search_boxes_container)
 
         # Main result table
-        self.result_table = QTableWidget()
+        self.result_table = CustomTableWidget()
         self.result_table.setColumnCount(5)
         # Updated header labels with generic names
         self.result_table.setHorizontalHeaderLabels(["CustomerID", "IsActive", "PackageID", "Description", "Source"])
@@ -136,8 +206,7 @@ class MainWindow(QMainWindow):
 
         layout.addLayout(combo_layout)
 
-        info_table = QTableWidget()
-        info_table.horizontalHeader().sectionClicked.connect(lambda index, table=info_table: self.header_clicked(index, table))
+        info_table = CustomTableWidget()
         layout.addWidget(info_table)
 
         if placeholder == "Infobox1":
@@ -169,7 +238,7 @@ class MainWindow(QMainWindow):
         self.search_button_clicked("Infobox2")
 
     def search_button_clicked(self, infobox):
-        # Perform search based on selection in combo box and display results in info box
+        # Handle search button click and get selected row's package ID
         selected_items = self.result_table.selectedItems()
         if not selected_items:
             return
@@ -199,19 +268,19 @@ class MainWindow(QMainWindow):
         query1 = """
             SELECT CustomerID, IsActive, PackageID, Description
             FROM DefaultTable1
-            WHERE PackageID = %s OR CustomerID = %s;
+            WHERE Id = %s OR CustomerID = %s;
         """
 
         query2 = """
             SELECT CustomerID, IsActive, PackageID, Description
             FROM DefaultTable2
-            WHERE PackageID = %s OR CustomerID = %s;
+            WHERE Id = %s OR CustomerID = %s;
         """
 
         query3 = """
             SELECT CustomerID, IsActive, PackageID, Description
             FROM DefaultTable3
-            WHERE PackageID = %s OR CustomerID = %s;
+            WHERE Id = %s OR CustomerID = %s;
         """
 
         try:
@@ -344,30 +413,35 @@ class MainWindow(QMainWindow):
                 query = f"""
                     SELECT x.EventID, x.IsAutoAdded, x.IsDeleted, x.SubscriptionStatus, x.CreationDate, x.LastUpdate
                     FROM {subscription_table} x
-                    WHERE x.PackageID = %s;
+                    JOIN DefaultEventTable f ON x.EventID = f.Id
+                    WHERE x.PackageID = %s AND f.StartDate > NOW() - INTERVAL 14 DAY;
                 """
                 columns = ["EventID", "IsAutoAdded", "IsDeleted", "SubscriptionStatus", "CreationDate", "LastUpdate"]
             else:
                 query = f"""
                     SELECT x.EventID, x.CreationDate
                     FROM {subscription_table} x
-                    WHERE x.PackageID = %s;
+                    JOIN DefaultEventTable f ON x.EventID = f.Id
+                    WHERE x.PackageID = %s AND f.StartDate > NOW() - INTERVAL 14 DAY;
                 """
                 columns = ["EventID", "CreationDate"]
 
             cursor.execute(query, (package_id,))
-            results = cursor.fetchall()
+            filtered_results = cursor.fetchall()
 
             connection.commit()
+
         except pymysql.MySQLError as e:
-            results = []
+            print(f"MySQL error: {e}")
+            filtered_results = []
         except Exception as e:
-            results = []
+            print(f"Error: {e}")
+            filtered_results = []
         finally:
             cursor.close()
             connection.close()
 
-        self.display_results_in_infobox(results, infobox, columns)
+        self.display_results_in_infobox(filtered_results, infobox, columns)
 
     def display_results_in_infobox(self, results, infobox, columns):
         # Display the results in the appropriate info box
@@ -384,53 +458,6 @@ class MainWindow(QMainWindow):
                     # Convert binary values to "Yes" or "No"
                     col_val = "Yes" if col_val == b'\x01' else "No"
                 info_table.setItem(row_position, col_idx, QTableWidgetItem(str(col_val)))
-
-    def header_clicked(self, logical_index, table_widget):
-        # Handle header click for filtering results
-        column_name = table_widget.horizontalHeaderItem(logical_index).text()
-        if column_name in ["CreationDate", "LastUpdate"]:
-            # Use a custom QDialog to select the date
-            dialog = QDialog(self)
-            dialog.setWindowTitle("Select Date")
-            dialog_layout = QVBoxLayout()
-
-            label = QLabel(f"Select a date for {column_name}:")
-            dialog_layout.addWidget(label)
-
-            date_edit = QDateEdit(dialog)
-            date_edit.setCalendarPopup(True)
-            date_edit.setDate(QDate.currentDate())
-            date_edit.setDisplayFormat("yyyy-MM-dd")
-            dialog_layout.addWidget(date_edit)
-
-            button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-            button_box.accepted.connect(dialog.accept)
-            button_box.rejected.connect(dialog.reject)
-            dialog_layout.addWidget(button_box)
-
-            dialog.setLayout(dialog_layout)
-
-            if dialog.exec_() == QDialog.Accepted:
-                filter_date = date_edit.date().toString("yyyy-MM-dd")
-                for row in range(table_widget.rowCount()):
-                    item = table_widget.item(row, logical_index)
-                    if filter_date not in item.text():
-                        table_widget.setRowHidden(row, True)
-                    else:
-                        table_widget.setRowHidden(row, False)
-        else:
-            # Use QInputDialog for other columns
-            filter_value, ok = QInputDialog.getText(self, "Filter", f"Enter filter value for {column_name}:")
-            if ok:
-                for row in range(table_widget.rowCount()):
-                    item = table_widget.item(row, logical_index)
-                    if filter_value:
-                        if filter_value.lower() not in item.text().lower():
-                            table_widget.setRowHidden(row, True)
-                        else:
-                            table_widget.setRowHidden(row, False)
-                    else:
-                        table_widget.setRowHidden(row, False)
 
 def main():
     app = QApplication(sys.argv)

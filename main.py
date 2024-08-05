@@ -498,9 +498,9 @@ class MainWindow(QMainWindow):
         self.loading_dialog.show()
 
         if selection == "Option1":
-            self.query_subscription_and_fixture_async("default_table3", infobox, package_id)
+            self.query_subscription_and_async("default_table3", infobox, package_id)
         elif selection == "Option2":
-            self.query_subscription_and_fixture_async("default_table4", infobox, package_id)
+            self.query_subscription_and_async("default_table4", infobox, package_id)
         elif selection == "Option3":
             self.query_web_notifications_async(infobox, package_id)
         elif selection == "Option4":
@@ -542,7 +542,7 @@ class MainWindow(QMainWindow):
             msg.setWindowTitle("Export Status")
             msg.exec_()
 
-    def query_subscription_and_fixture_async(self, subscription_table, infobox, package_id):
+    def query_subscription_and_async(self, subscription_table, infobox, package_id):
         try:
             connection = pymysql.connect(**self.connection_config)
             cursor = connection.cursor()

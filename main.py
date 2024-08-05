@@ -1,14 +1,14 @@
 import sys
 import pymysql
 import configparser
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QLineEdit, QTextEdit, QComboBox, QGridLayout, QFrame, QTableWidget, QTableWidgetItem, QPushButton)
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QLineEdit, QTextEdit, QComboBox, QGridLayout, QFrame, QTableWidget, QTableWidgetItem, QPushButton, QHeaderView, QInputDialog)
 from PyQt5.QtCore import pyqtSlot, Qt
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        self.setWindowTitle("Search Results Interface")
+        self.setWindowTitle("Easy DB Viewer")
         self.setGeometry(100, 100, 1024, 720)
 
         main_widget = QWidget()
@@ -118,6 +118,7 @@ class MainWindow(QMainWindow):
         layout.addLayout(combo_layout)
 
         info_table = QTableWidget()
+        info_table.horizontalHeader().sectionClicked.connect(lambda index, table=info_table: self.header_clicked(index, table))
         layout.addWidget(info_table)
 
         if placeholder == "Infobox1":
@@ -320,12 +321,20 @@ class MainWindow(QMainWindow):
             connection = pymysql.connect(**self.connection_config)
             cursor = connection.cursor()
 
-            # Log the exact query being executed
-            query = f"""
-                SELECT x.EventID, x.Status
-                FROM {subscription_table} x
-                WHERE x.PackageID = %s;
-            """
+            if subscription_table == "DefaultSubscriptionTable1":
+                query = f"""
+                    SELECT x.EventID, x.IsAutoAdded, x.IsDeleted, x.SubscriptionStatus, x.CreationDate, x.LastUpdate
+                    FROM {subscription_table} x
+                    WHERE x.PackageID = %s;
+                """
+                columns = ["EventID", "IsAutoAdded", "IsDeleted", "SubscriptionStatus", "CreationDate", "LastUpdate"]
+            else:
+                query = f"""
+                    SELECT x.EventID, x.CreationDate
+                    FROM {subscription_table} x
+                    WHERE x.PackageID = %s;
+                """
+                columns = ["EventID", "CreationDate"]
 
             cursor.execute(query, (package_id,))
             results = cursor.fetchall()
@@ -339,20 +348,31 @@ class MainWindow(QMainWindow):
             cursor.close()
             connection.close()
 
-        self.display_results_in_infobox(results, infobox)
+        self.display_results_in_infobox(results, infobox, columns)
 
-    def display_results_in_infobox(self, results, infobox):
+    def display_results_in_infobox(self, results, infobox, columns):
         # Display the results in the appropriate info box
         info_table = self.info_table1 if infobox == "Infobox1" else self.info_table2
         info_table.setRowCount(0)
-        info_table.setColumnCount(2)
-        info_table.setHorizontalHeaderLabels(["EventID", "Status"])
+        info_table.setColumnCount(len(columns))
+        info_table.setHorizontalHeaderLabels(columns)
 
         for row in results:
             row_position = info_table.rowCount()
             info_table.insertRow(row_position)
-            info_table.setItem(row_position, 0, QTableWidgetItem(str(row[0])))
-            info_table.setItem(row_position, 1, QTableWidgetItem(str(row[1])))
+            for col_idx, col_val in enumerate(row):
+                info_table.setItem(row_position, col_idx, QTableWidgetItem(str(col_val)))
+
+    def header_clicked(self, logical_index, table_widget):
+        # Handle header click for filtering results
+        filter_value, ok = QInputDialog.getText(self, "Filter", f"Enter filter value for {table_widget.horizontalHeaderItem(logical_index).text()}:")
+        if ok and filter_value:
+            for row in range(table_widget.rowCount()):
+                item = table_widget.item(row, logical_index)
+                if filter_value.lower() not in item.text().lower():
+                    table_widget.setRowHidden(row, True)
+                else:
+                    table_widget.setRowHidden(row, False)
 
 def main():
     app = QApplication(sys.argv)

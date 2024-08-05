@@ -8,7 +8,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        self.setWindowTitle("Easy DB Viewer")
+        self.setWindowTitle("Search Results Interface")
         self.setGeometry(100, 100, 1024, 720)
 
         main_widget = QWidget()

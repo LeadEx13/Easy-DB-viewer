@@ -4,6 +4,8 @@
 
 Easy DB viewer is a desktop application developed using Python and PyQt5. It provides a user-friendly interface for searching and displaying data from a MySQL database. Users can search based on various criteria and view detailed information from database tables. The interface is designed to be intuitive, making it easy to filter, search, and view results efficiently. (Developed as part of efficiency improvement in the department)
 
+![Screenshot of Easy DB viewer](example/app.png)
+
 ## Features
 
 - **Multi-Criteria Search**: Search using different columns.

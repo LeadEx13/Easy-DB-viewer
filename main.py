@@ -3,10 +3,13 @@ import os
 import csv
 import pymysql
 import configparser
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QLineEdit, QTableWidget, QTableWidgetItem, QComboBox, QGridLayout, QFrame, QPushButton, QHeaderView, QInputDialog, QSizePolicy, QDateEdit, QDialog, QLabel, QDialogButtonBox, QMessageBox)
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QLineEdit, QTableWidget,
+                             QTableWidgetItem, QComboBox, QGridLayout, QFrame, QPushButton, QHeaderView, QInputDialog,
+                             QSizePolicy, QDateEdit, QDialog, QLabel, QDialogButtonBox, QMessageBox)
 from PyQt5.QtCore import pyqtSlot, Qt, QDate, QTimer
 from PyQt5.QtGui import QIcon, QPalette, QColor
 from datetime import datetime
+
 
 class CustomTableWidget(QTableWidget):
     def __init__(self, parent=None):
@@ -23,7 +26,7 @@ class CustomTableWidget(QTableWidget):
 
     def filter_column(self, column):
         column_name = self.horizontalHeaderItem(column).text()
-        if column_name in ["Date1", "Date2", "Date3"]:
+        if column_name in ["Col1", "Col2", "Col3"]:
             self.filter_by_date(column, column_name)
         else:
             filter_value, ok = QInputDialog.getText(self, "Filter", f"Enter filter value for {column_name}:")
@@ -92,6 +95,7 @@ class CustomTableWidget(QTableWidget):
         else:
             self.horizontalHeader().setSortIndicator(column, Qt.AscendingOrder)
 
+
 class LoadingDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -105,15 +109,14 @@ class LoadingDialog(QDialog):
         self.label.setText(message)
         self.adjustSize()  # Adjust the dialog size based on the content
 
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        self.setWindowTitle("Easy DB viewer")
+        self.setWindowTitle("Ez DB search")
         self.setGeometry(100, 100, 1024, 720)
-        self.setWindowIcon(QIcon('icon.png'))
-
-        self.loading_dialog = LoadingDialog(self)
+        # self.setWindowIcon(QIcon('icon.png'))
 
         main_widget = QWidget()
         self.setCentralWidget(main_widget)
@@ -126,7 +129,7 @@ class MainWindow(QMainWindow):
         main_layout.addLayout(left_layout)
 
         self.search_textbox = QLineEdit(self)
-        self.search_textbox.setPlaceholderText("Search by Id, Id2, or Description")
+        self.search_textbox.setPlaceholderText("Search by Id, CustomerId, or Description")
         self.search_textbox.setMaximumWidth(525)
         self.search_textbox.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.search_textbox.returnPressed.connect(self.search_textbox_keydown)
@@ -143,7 +146,7 @@ class MainWindow(QMainWindow):
         for column in range(self.result_table.columnCount()):
             if column == 3:  # Assuming "Description" is the 4th column (index 3)
                 header.setSectionResizeMode(column, QHeaderView.Fixed)
-                header.resizeSection(column, 80)  # Set fixed width to 80
+                header.resizeSection(column, 80)
             else:
                 header.setSectionResizeMode(column, QHeaderView.ResizeToContents)
 
@@ -152,6 +155,10 @@ class MainWindow(QMainWindow):
         self.result_table.setMaximumWidth(525)
         self.result_table.itemSelectionChanged.connect(self.result_table_selection_changed)
         left_layout.addWidget(self.result_table)
+
+        self.main_loading_line = QLabel()
+        self.main_loading_line.setFixedHeight(2)
+        left_layout.addWidget(self.main_loading_line)
 
         # Subresult search and box
         sub_search_container = QWidget()
@@ -162,6 +169,8 @@ class MainWindow(QMainWindow):
 
         self.sub_search_combo_box = QComboBox(self)
         self.sub_search_combo_box.addItem("SubOption1")
+        self.sub_search_combo_box.addItem("SubOption2")
+        self.sub_search_combo_box.addItem("SubOption3")
         # Add more items as needed here...
         sub_search_layout.addWidget(self.sub_search_combo_box)
 
@@ -184,14 +193,25 @@ class MainWindow(QMainWindow):
 
         self.sub_result_table = CustomTableWidget()
         self.sub_result_table.setMaximumWidth(525)
+        self.sub_result_table.setMaximumWidth(525)
         left_layout.addWidget(self.sub_result_table)
+
+        self.sub_loading_line = QLabel()
+        self.sub_loading_line.setFixedHeight(2)
+        left_layout.addWidget(self.sub_loading_line)
 
         # Right side layout
         right_layout = QHBoxLayout()
         main_layout.addLayout(right_layout)
 
-        right_layout.addWidget(self.create_info_box("Infobox1", "Option1", "Option2", "Option3", "Option4", "Option5", self.search_button_clicked_info3))
-        right_layout.addWidget(self.create_info_box("Infobox2", "Option1", "Option2", "Option3", "Option4", "Option5", self.search_button_clicked_info4))
+        right_layout.addWidget(
+            self.create_info_box("Infobox1", "Option1", "Option2",
+                                 "Option3", "Option4", "Option5",
+                                 self.search_button_clicked_info3))
+        right_layout.addWidget(
+            self.create_info_box("Infobox2", "Option1", "Option2",
+                                 "Option3", "Option4", "Option5",
+                                 self.search_button_clicked_info4))
 
         # Load database configuration from config.ini
         self.load_database_config()
@@ -201,12 +221,22 @@ class MainWindow(QMainWindow):
 
     def load_database_config(self):
         config = configparser.ConfigParser()
-        config.read('config.ini')
+        if hasattr(sys, '_MEIPASS'):
+            config_path = os.path.join(sys._MEIPASS, 'config.ini')
+        else:
+            config_path = os.path.join(os.path.dirname(__file__), 'config.ini')
+
+        config.read(config_path)
+
+        # some of the DBs not use database as parameter to connect
+        if 'database' not in config:
+            raise KeyError("Config file is missing the 'database' section")
 
         self.connection_config = {
             'host': config['database'].get('host', ''),
             'user': config['database'].get('user', ''),
             'password': config['database'].get('password', ''),
+            'database': config['database'].get('database', ''),
             'port': int(config['database'].get('port', 3306))
         }
 
@@ -240,17 +270,26 @@ class MainWindow(QMainWindow):
         info_table = CustomTableWidget()
         layout.addWidget(info_table)
 
+        loading_line = QLabel()
+        loading_line.setFixedHeight(2)
+        layout.addWidget(loading_line)
+
         if placeholder == "Infobox1":
             self.info_table1 = info_table
             self.combo_box_info3 = combo_box
-            export_button.clicked.connect(lambda: self.export_table_to_csv(self.info_table1, self.combo_box_info3.currentText()))
+            self.info_loading_line1 = loading_line
+            export_button.clicked.connect(
+                lambda: self.export_table_to_csv(self.info_table1, self.combo_box_info3.currentText()))
         else:
             self.info_table2 = info_table
             self.combo_box_info4 = combo_box
-            export_button.clicked.connect(lambda: self.export_table_to_csv(self.info_table2, self.combo_box_info4.currentText()))
+            self.info_loading_line2 = loading_line
+            export_button.clicked.connect(
+                lambda: self.export_table_to_csv(self.info_table2, self.combo_box_info4.currentText()))
 
         # Adjust columns based on the text in these specific fields
-        adjust_columns = ["Col1", "Col2", "Col3", "Col4", "Col5", "Col6", "Col7", "Col8", "Col9", "Col10", "Col11"]
+        adjust_columns = ["Col1", "Col2", "Col3", "Col4", "Col5", "Col6", "Col7",
+                          "Col8", "Col9", "Col10", "Col11"]
         for i in range(info_table.columnCount()):
             if info_table.horizontalHeaderItem(i).text() in adjust_columns:
                 info_table.resizeColumnToContents(i)
@@ -296,26 +335,29 @@ class MainWindow(QMainWindow):
     @pyqtSlot()
     def sub_search_button_clicked(self):
         selected_table = self.sub_search_combo_box.currentText()
-        self.loading_dialog.update_message(f"Loading {selected_table}...")
-        self.loading_dialog.show()
+        self.set_loading_line(self.sub_loading_line, True)
+        QTimer.singleShot(1000, lambda: self.query_sub_search_data(selected_table))
 
-        #QTimer.singleShot(500000, self.query_sub_search_data)
-
+    def query_sub_search_data(self, selected_table):
         if selected_table == "SubOption1":
-            self.query_suboption1()
+            self.query_sub_option1()
+        elif selected_table == "SubOption2":
+            self.query_sub_option2()
+        elif selected_table == "SubOption3":
+            self.query_sub_option3()
         # Add more elif clauses for other subsearch options
 
-    def query_suboption1(self):
+    def query_sub_option1(self):
         try:
             connection = pymysql.connect(**self.connection_config)
             cursor = connection.cursor()
 
             query = """
-                SELECT col1, GROUP_CONCAT(DISTINCT col2) AS col3, col4
-                FROM table1
-                JOIN table2 ON col1 = col5
-                WHERE col4 > NOW()
-                GROUP BY col1, col4;
+                SELECT s.Col1, GROUP_CONCAT(DISTINCT s.Col2) AS Col2, f.Col3
+                FROM table1 s
+                JOIN table2 f ON s.Col1 = f.Col1
+                WHERE f.Col3 > NOW()
+                GROUP BY s.Col1, f.Col3;
             """
             cursor.execute(query)
             results = cursor.fetchall()
@@ -332,11 +374,60 @@ class MainWindow(QMainWindow):
 
         self.display_subsearch_results(results)
 
+    def query_sub_option2(self):
+        try:
+            connection = pymysql.connect(**self.connection_config)
+            cursor = connection.cursor()
+
+            query = """
+                SELECT Col1, Col2, Col3, Col4
+                FROM table3;
+            """
+            cursor.execute(query)
+            results = cursor.fetchall()
+
+            connection.commit()
+
+        except pymysql.MySQLError as e:
+            results = []
+        except Exception as e:
+            results = []
+        finally:
+            cursor.close()
+            connection.close()
+
+        self.display_subsearch_results_providers(results)
+
+    def query_sub_option3(self):
+        try:
+            connection = pymysql.connect(**self.connection_config)
+            cursor = connection.cursor()
+
+            query = """
+                SELECT Col1, Col2, Col3
+                FROM table4;
+            """
+            cursor.execute(query)
+            results = cursor.fetchall()
+
+            connection.commit()
+
+        except pymysql.MySQLError as e:
+            results = []
+        except Exception as e:
+            results = []
+        finally:
+            cursor.close()
+            connection.close()
+
+        self.display_subsearch_results_languages(results)
+
     def display_subsearch_results(self, results):
         self.sub_result_table.setRowCount(0)
         if not results:
             self.sub_result_table.setRowCount(1)
             self.sub_result_table.setItem(0, 0, QTableWidgetItem("No results found."))
+            self.set_loading_line(self.sub_loading_line, False)
             return
 
         columns = ["Col1", "Col2", "Col3"]
@@ -349,25 +440,68 @@ class MainWindow(QMainWindow):
             for col_idx, col_val in enumerate(row):
                 self.sub_result_table.setItem(row_position, col_idx, QTableWidgetItem(str(col_val)))
 
-        self.loading_dialog.close()
+        self.set_loading_line(self.sub_loading_line, False)
+
+    def display_subsearch_results_providers(self, results):
+        self.sub_result_table.setRowCount(0)
+        if not results:
+            self.sub_result_table.setRowCount(1)
+            self.sub_result_table.setItem(0, 0, QTableWidgetItem("No results found."))
+            self.set_loading_line(self.sub_loading_line, False)
+            return
+
+        columns = ["Col1", "Col2", "Col3", "Col4"]
+        self.sub_result_table.setColumnCount(len(columns))
+        self.sub_result_table.setHorizontalHeaderLabels(columns)
+
+        for row in results:
+            row_position = self.sub_result_table.rowCount()
+            self.sub_result_table.insertRow(row_position)
+            for col_idx, col_val in enumerate(row):
+                if columns[col_idx] in ["Col2", "Col3", "Col4"]:
+                    col_val = "Yes" if col_val == b'\x01' else "Yes" if col_val == 1 else "No"
+                self.sub_result_table.setItem(row_position, col_idx, QTableWidgetItem(str(col_val)))
+
+        self.set_loading_line(self.sub_loading_line, False)
+
+    def display_subsearch_results_languages(self, results):
+        self.sub_result_table.setRowCount(0)
+        if not results:
+            self.sub_result_table.setRowCount(1)
+            self.sub_result_table.setItem(0, 0, QTableWidgetItem("No results found."))
+            self.set_loading_line(self.sub_loading_line, False)
+            return
+
+        columns = ["Col1", "Col2", "Col3"]
+        self.sub_result_table.setColumnCount(len(columns))
+        self.sub_result_table.setHorizontalHeaderLabels(columns)
+
+        for row in results:
+            row_position = self.sub_result_table.rowCount()
+            self.sub_result_table.insertRow(row_position)
+            for col_idx, col_val in enumerate(row):
+                self.sub_result_table.setItem(row_position, col_idx, QTableWidgetItem(str(col_val)))
+
+        self.set_loading_line(self.sub_loading_line, False)
 
     def search_database_for_numeric_info(self, search_value):
-        self.loading_dialog.update_message("Loading search results...")
-        self.loading_dialog.show()
+        self.set_loading_line(self.main_loading_line, True)
+        QTimer.singleShot(1000, lambda: self.query_numeric_info(search_value))
 
+    def query_numeric_info(self, search_value):
         connection = pymysql.connect(**self.connection_config)
         cursor = connection.cursor()
 
         query1 = """
-            SELECT col1, col2, col3 as PackageID, col4, col5, col6 as Distribution, col7 as Type
-            FROM table3
-            WHERE col3 = %s OR col1 = %s;
+            SELECT Col1, Col2, Col3, Col4, Col5, Col6, Col7
+            FROM table5
+            WHERE Col3 = %s OR Col1 = %s;
         """
 
         query2 = """
-            SELECT col1, col2, col3 as PackageID, col4, col5, col6 as Distribution, col7 as Type
-            FROM table4
-            WHERE col3 = %s OR col1 = %s;
+            SELECT Col1, Col2, Col3, Col4, Col5, Col6, Col7
+            FROM table6
+            WHERE Col3 = %s OR Col1 = %s;
         """
 
         try:
@@ -388,31 +522,33 @@ class MainWindow(QMainWindow):
 
             connection.commit()
         except Exception as e:
+            print(f"Error querying database: {e}")
             self.result_table.setRowCount(1)
             self.result_table.setItem(0, 0, QTableWidgetItem("Error querying database. Check console for details."))
         finally:
             cursor.close()
             connection.close()
 
-        self.loading_dialog.close()
+        self.set_loading_line(self.main_loading_line, False)
 
     def search_database_for_text_info(self, search_text):
-        self.loading_dialog.update_message("Loading search results...")
-        self.loading_dialog.show()
+        self.set_loading_line(self.main_loading_line, True)
+        QTimer.singleShot(1000, lambda: self.query_text_info(search_text))
 
+    def query_text_info(self, search_text):
         connection = pymysql.connect(**self.connection_config)
         cursor = connection.cursor()
 
         query1 = """
-            SELECT col1, col2, col3 as PackageID, col4, col5, col6 as Distribution, col7 as Type
-            FROM table3
-            WHERE col4 LIKE %s;
+            SELECT Col1, Col2, Col3, Col4, Col5, Col6, Col7
+            FROM table5
+            WHERE Col4 LIKE %s;
         """
 
         query2 = """
-            SELECT col1, col2, col3 as PackageID, col4, col5, col6 as Distribution, col7 as Type
-            FROM table4
-            WHERE col4 LIKE %s;
+            SELECT Col1, Col2, Col3, Col4, Col5, Col6, Col7
+            FROM table6
+            WHERE Col4 LIKE %s;
         """
 
         try:
@@ -433,20 +569,21 @@ class MainWindow(QMainWindow):
 
             connection.commit()
         except Exception as e:
+            print(f"Error querying database: {e}")
             self.result_table.setRowCount(1)
             self.result_table.setItem(0, 0, QTableWidgetItem("Error querying database. Check console for details."))
         finally:
             cursor.close()
             connection.close()
 
-        self.loading_dialog.close()
+        self.set_loading_line(self.main_loading_line, False)
 
     def add_results_to_table(self, results, source):
         for row in results:
             row_position = self.result_table.rowCount()
             self.result_table.insertRow(row_position)
-            self.result_table.setItem(row_position, 0, QTableWidgetItem(str(row[0])))  # Id
-            type_value = 'Option1' if row[6] in [b'\x01', 1] else 'Option2'
+            self.result_table.setItem(row_position, 0, QTableWidgetItem(str(row[0])))  # CustomerID
+            type_value = 'Yes' if row[6] in [b'\x01', 1] else 'No'
             self.result_table.setItem(row_position, 1, QTableWidgetItem(type_value))  # Type
             self.result_table.setItem(row_position, 2, QTableWidgetItem(str(row[2])))  # PackageID
             self.result_table.setItem(row_position, 3, QTableWidgetItem(str(row[3])))  # Description
@@ -458,43 +595,44 @@ class MainWindow(QMainWindow):
             self.result_table.setItem(row_position, 7, QTableWidgetItem(str(row[4])))  # ExpirationDate
 
     def filter_results(self):
-        id_filter = self.customer_id_search.text()
+        customer_id_filter = self.customer_id_search.text()
         is_active_filter = self.is_active_search.text().lower()
         package_id_filter = self.package_id_search.text()
         description_filter = self.description_search.text().lower()
 
         for row in range(self.result_table.rowCount()):
-            id_item = self.result_table.item(row, 0)
+            customer_id_item = self.result_table.item(row, 0)
             is_active_item = self.result_table.item(row, 1)
             package_id_item = self.result_table.item(row, 2)
             description_item = self.result_table.item(row, 3)
 
-            id_visible = id_filter in id_item.text()
+            customer_id_visible = customer_id_filter in customer_id_item.text()
             is_active_visible = is_active_filter in is_active_item.text().lower()
             package_id_visible = package_id_filter in package_id_item.text()
             description_visible = description_filter in description_item.text().lower()
 
-            is_row_visible = id_visible and is_active_visible and package_id_visible and description_visible
+            is_row_visible = customer_id_visible and is_active_visible and package_id_visible and description_visible
             self.result_table.setRowHidden(row, not is_row_visible)
 
     def handle_selection_async(self, selection, infobox, package_id):
-        self.loading_dialog.update_message(f"Loading {selection} data...")
-        self.loading_dialog.show()
+        self.set_loading_line(self.info_loading_line1 if infobox == "Infobox1" else self.info_loading_line2, True)
+        QTimer.singleShot(1000, lambda: self.query_selection_async(selection, infobox, package_id))
 
+    def query_selection_async(self, selection, infobox, package_id):
         if selection == "Option1":
-            self.query_subscription_and_fixture_async("table5", infobox, package_id)
+            self.query_option1_async("table7", infobox, package_id)
         elif selection == "Option2":
-            self.query_subscription_and_fixture_async("table6", infobox, package_id)
+            self.query_option2_async(infobox, package_id)
         elif selection == "Option3":
-            self.query_web_notifications_async(infobox, package_id)
+            self.query_option3_async(infobox, package_id)
         elif selection == "Option4":
-            self.query_subscriptions_async(infobox, package_id)
+            self.query_option4_async(infobox, package_id)
         elif selection == "Option5":
-            self.query_customer_setting_changes_async(infobox, package_id)
+            self.query_option5_async(infobox, package_id)
 
     def export_table_to_csv(self, table, table_name):
         try:
-            folder_path = os.path.join(os.path.expanduser("~"), "Documents", "Easy DB viewer")
+            folder_path = os.path.join(os.path.expanduser("~"), "Documents", "Ez Search")
             os.makedirs(folder_path, exist_ok=True)
             file_name = f"{table_name}_export_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
             file_path = os.path.join(folder_path, file_name)
@@ -526,27 +664,27 @@ class MainWindow(QMainWindow):
             msg.setWindowTitle("Export Status")
             msg.exec_()
 
-    def query_subscription_and_fixture_async(self, subscription_table, infobox, package_id):
+    def query_option1_async(self, subscription_table, infobox, package_id):
         try:
             connection = pymysql.connect(**self.connection_config)
             cursor = connection.cursor()
 
-            if subscription_table == "table5":
+            if subscription_table == "table7":
                 query = f"""
-                    SELECT x.col1 as Col1, x.col2, x.col3, x.col4, x.col5, x.col6
+                    SELECT x.Col1 as Col1, x.Col2, x.Col3, x.Col4, x.Col5, x.Col6
                     FROM {subscription_table} x
-                    JOIN table2 f ON x.col1 = f.col5
-                    WHERE x.PackageId = %s AND f.col4 > NOW() - INTERVAL 14 DAY;
+                    JOIN table2 f ON x.Col1 = f.Col1
+                    WHERE x.Col3 = %s AND f.Col3 > NOW() - INTERVAL 14 DAY;
                 """
                 columns = ["Col1", "Col2", "Col3", "Col4", "Col5", "Col6"]
             else:
                 query = f"""
-                    SELECT x.col1 as Col1, x.col4
+                    SELECT x.Col1 as Col1, x.Col5
                     FROM {subscription_table} x
-                    JOIN table2 f ON x.col1 = f.col5
-                    WHERE x.PackageId = %s AND f.col4 > NOW() - INTERVAL 20 DAY;
+                    JOIN table2 f ON x.Col1 = f.Col1
+                    WHERE x.Col3 = %s AND f.Col3 > NOW() - INTERVAL 14 DAY;
                 """
-                columns = ["Col1", "Col4"]
+                columns = ["Col1", "Col5"]
 
             cursor.execute(query, (package_id,))
             filtered_results = cursor.fetchall()
@@ -567,17 +705,103 @@ class MainWindow(QMainWindow):
 
         self.display_results_in_infobox(filtered_results, infobox, columns)
 
-    def query_web_notifications_async(self, infobox, package_id):
+    def query_option2_async(self, infobox, package_id):
+        try:
+            connection = pymysql.connect(**self.connection_config)
+            cursor = connection.cursor()
+
+            # Query table8
+            query_prematch = """
+                SELECT Col1, Col5
+                FROM table8
+                WHERE Col3 = %s;
+            """
+            cursor.execute(query_prematch, (package_id,))
+            prematch_results = cursor.fetchall()
+
+            # Query table9
+            query_subscriptions = """
+                SELECT Col2, Col3, Col4, Col5
+                FROM table9
+                WHERE Col3 = %s;
+            """
+            cursor.execute(query_subscriptions, (package_id,))
+            subscriptions_results = cursor.fetchall()
+
+            combined_results = []
+
+            # Add table8 results with level "Fixture"
+            for row in prematch_results:
+                combined_results.append((*row, 'Fixture'))
+
+            # Add fixtures from table9 with appropriate level
+            for row in subscriptions_results:
+                col2, col3, col4, col5 = row
+
+                if col4:
+                    query_fixtures = """
+                        SELECT Col1, Col5
+                        FROM table2
+                        WHERE Col4 = %s AND Col5 > NOW() - INTERVAL 5 DAY AND Col6 NOT IN (10, 7, 4);
+                    """
+                    cursor.execute(query_fixtures, (col4,))
+                    fixtures = cursor.fetchall()
+                    for fixture in fixtures:
+                        fixture_id, start_date = fixture
+                        combined_results.append((fixture_id, max(start_date, col5), 'League'))
+
+                elif col3:
+                    query_fixtures = """
+                        SELECT Col1, Col5
+                        FROM table2
+                        WHERE Col3 = %s AND Col2 = %s AND Col5 > NOW() - INTERVAL 5 DAY AND Col6 NOT IN (10, 7, 4);
+                    """
+                    cursor.execute(query_fixtures, (col3, col2))
+                    fixtures = cursor.fetchall()
+                    for fixture in fixtures:
+                        fixture_id, start_date = fixture
+                        combined_results.append((fixture_id, max(start_date, col5), 'Location'))
+
+                elif col2:
+                    query_fixtures = """
+                        SELECT Col1, Col5
+                        FROM table2
+                        WHERE Col2 = %s AND Col5 > NOW() - INTERVAL 5 DAY AND Col6 NOT IN (10, 7, 4);
+                    """
+                    cursor.execute(query_fixtures, (col2,))
+                    fixtures = cursor.fetchall()
+                    for fixture in fixtures:
+                        fixture_id, start_date = fixture
+                        combined_results.append((fixture_id, max(start_date, col5), 'Sport'))
+
+            connection.commit()
+
+        except pymysql.MySQLError as e:
+            print(f"MySQL error: {e}")
+            combined_results = []
+        except Exception as e:
+            print(f"Exception: {e}")
+            combined_results = []
+        finally:
+            cursor.close()
+            connection.close()
+
+        if not combined_results:
+            combined_results = [(None, None, "No data available")]
+
+        self.display_results_in_infobox(combined_results, infobox, ["Col1", "Col5", "Level"])
+
+    def query_option3_async(self, infobox, package_id):
         try:
             connection = pymysql.connect(**self.connection_config)
             cursor = connection.cursor()
 
             query = """
-                SELECT col1, col2, col3
-                FROM table7
-                WHERE PackageId = %s AND col3 >= NOW() - INTERVAL 1 MONTH;
+                SELECT Col1, Col2, Col5
+                FROM table10
+                WHERE Col3 = %s AND Col5 >= NOW() - INTERVAL 14 DAY;
             """
-            columns = ["Col1", "Col2", "Col3"]
+            columns = ["Col1", "Col2", "Col5"]
 
             cursor.execute(query, (package_id,))
             filtered_results = cursor.fetchall()
@@ -594,50 +818,50 @@ class MainWindow(QMainWindow):
 
         if not filtered_results:
             filtered_results = [(None, None, None)]
-            filtered_results[0] = ("No data available within the last month",)
+            filtered_results[0] = ("No data available within the last 14 days",)
 
         self.display_results_in_infobox(filtered_results, infobox, columns)
 
-    def query_subscriptions_async(self, infobox, package_id):
+    def query_option4_async(self, infobox, package_id):
         try:
             connection = pymysql.connect(**self.connection_config)
             cursor = connection.cursor()
 
             query = """
-                SELECT col1, col2, col3, col4, col5
-                FROM table8
-                WHERE PackageId = %s AND col4 >= NOW() - INTERVAL 1 MONTH;
-            """
-            columns = ["Col1", "Col2", "Col3", "Col4", "Col5"]
-
-            cursor.execute(query, (package_id,))
-            filtered_results = cursor.fetchall()
-
-            connection.commit()
-
-        except pymysql.MySQLError as e:
-            filtered_results = []
-        except Exception as e:
-            filtered_results = []
-        finally:
-            cursor.close()
-            connection.close()
-
-        if not filtered_results:
-            filtered_results = [(None, None, None, None, None)]
-            filtered_results[0] = ("No data available within the last month",)
-
-        self.display_results_in_infobox(filtered_results, infobox, columns)
-
-    def query_customer_setting_changes_async(self, infobox, package_id):
-        try:
-            connection = pymysql.connect(**self.connection_config)
-            cursor = connection.cursor()
-
-            query = """
-                SELECT col1, col2, col3, col4, col5
+                SELECT Col2, Col3, Col4, Col5, Col6
                 FROM table9
-                WHERE PackageId = %s AND col5 >= NOW() - INTERVAL 1 MONTH;
+                WHERE Col3 = %s AND Col5 >= NOW() - INTERVAL 14 DAY;
+            """
+            columns = ["Col2", "Col3", "Col4", "Col5", "Col6"]
+
+            cursor.execute(query, (package_id,))
+            filtered_results = cursor.fetchall()
+
+            connection.commit()
+
+        except pymysql.MySQLError as e:
+            filtered_results = []
+        except Exception as e:
+            filtered_results = []
+        finally:
+            cursor.close()
+            connection.close()
+
+        if not filtered_results:
+            filtered_results = [(None, None, None, None, None)]
+            filtered_results[0] = ("No data available within the last 14 days",)
+
+        self.display_results_in_infobox(filtered_results, infobox, columns)
+
+    def query_option5_async(self, infobox, package_id):
+        try:
+            connection = pymysql.connect(**self.connection_config)
+            cursor = connection.cursor()
+
+            query = """
+                SELECT Col1, Col2, Col3, Col4, Col5
+                FROM table11
+                WHERE Col3 = %s AND Col5 >= NOW() - INTERVAL 14 DAY;
             """
             columns = ["Col1", "Col2", "Col3", "Col4", "Col5"]
 
@@ -656,7 +880,7 @@ class MainWindow(QMainWindow):
 
         if not filtered_results:
             filtered_results = [(None, None, None, None, None)]
-            filtered_results[0] = ("No data available within the last month",)
+            filtered_results[0] = ("No data available within the last 14 days",)
 
         self.display_results_in_infobox(filtered_results, infobox, columns)
 
@@ -670,13 +894,19 @@ class MainWindow(QMainWindow):
             row_position = info_table.rowCount()
             info_table.insertRow(row_position)
             for col_idx, col_val in enumerate(row):
-                if columns[col_idx] in ["Col2", "Col3", "Col5"]:
+                if columns[col_idx] in ["Col2", "Col3", "Col6"]:
                     col_val = "Yes" if col_val == b'\x01' else "No"
-                info_table.setItem(row_position, col_idx, QTableWidgetItem(str(col_val) if col_val is not None else "No data available"))
+                info_table.setItem(row_position, col_idx,
+                                   QTableWidgetItem(str(col_val) if col_val is not None else "No data available"))
 
-        self.loading_dialog.close()
+        self.set_loading_line(self.info_loading_line1 if infobox == "Infobox1" else self.info_loading_line2, False)
 
-     # light mode that currently not in use
+    def set_loading_line(self, line_label, loading):
+        if loading:
+            line_label.setStyleSheet("background-color: red;")
+        else:
+            line_label.setStyleSheet("background-color: green;")
+
     def set_light_mode(self):
         app.setStyle('Fusion')
         palette = QPalette()
@@ -713,12 +943,14 @@ class MainWindow(QMainWindow):
         palette.setColor(QPalette.HighlightedText, Qt.black)
         app.setPalette(palette)
 
+
 def main():
     global app
     app = QApplication(sys.argv)
     window = MainWindow()
     window.show()
     sys.exit(app.exec_())
+
 
 if __name__ == "__main__":
     main()

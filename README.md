@@ -2,11 +2,11 @@
 
 ## Overview
 
-The Easy-DB-viewer is a desktop application developed using Python and PyQt5. It provides a user-friendly interface for searching and displaying data from a MySQL database. Users can search based on various criteria and view detailed information from database tables. The interface is designed to be intuitive, making it easy to filter, search, and view results efficiently. (Developed as part of efficiency improvement in my department)
+Easy DB viewer is a desktop application developed using Python and PyQt5. It provides a user-friendly interface for searching and displaying data from a MySQL database. Users can search based on various criteria and view detailed information from database tables. The interface is designed to be intuitive, making it easy to filter, search, and view results efficiently. (Developed as part of efficiency improvement in the department)
 
 ## Features
 
-- **Multi-Criteria Search**: Search using different columns
+- **Multi-Criteria Search**: Search using different columns.
 - **Detailed Information Display**: View detailed records in the main results area, with additional details available in InfoBoxes.
 - **Dynamic Data Filtering**: Filter results dynamically using input fields for each column.
 - **Database Interaction**: Connects to a MySQL database, executing queries to fetch and display data in a user-friendly format.
@@ -37,6 +37,7 @@ Before running the application, ensure you have the following software installed
    Install the necessary Python packages:
    ```
    pip install PyQt5
+   pip install pymysql
    ```
 
 3. **Configure Database Connection**
@@ -47,7 +48,7 @@ Before running the application, ensure you have the following software installed
    host = your-database-host
    user = your-database-user
    password = your-database-password
-   database = your_database_name
+   database = your-database-name
    port = your-database-port
    ```
 
@@ -78,3 +79,5 @@ python main.py
 ## Contribution
 
 Contributions are welcome! Please fork the repository and submit a pull request with your changes. For major changes, please open an issue to discuss what you would like to change.
+```
+Feel free to replace `<repository-url>` and `<repository-directory>` with the appropriate values for your repository.
